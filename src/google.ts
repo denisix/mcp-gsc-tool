@@ -70,13 +70,13 @@ export function cachedTokenSource(fetchToken: () => Promise<{ token: string; exp
 const b64url = (s: string | Buffer) => Buffer.from(s).toString("base64url");
 
 /** Signs the JWT a service account trades for an access token (RFC 7523). Exported for tests. */
-export function signServiceAccountJwt(key: { client_email: string; private_key: string; token_uri?: string }, scopes: string[], now = Date.now()): string {
+export function signServiceAccountJwt(key: { client_email: string; private_key: string }, scopes: string[], now = Date.now()): string {
   const iat = Math.floor(now / 1000);
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claims = b64url(JSON.stringify({
     iss: key.client_email,
     scope: scopes.join(" "),
-    aud: key.token_uri || TOKEN_URL,
+    aud: TOKEN_URL,
     iat,
     exp: iat + 3600,
   }));
@@ -90,7 +90,8 @@ export function serviceAccountTokenSource(keyFile: string, scopes: string[]): To
     if (!key.client_email || !key.private_key) {
       throw new Error(`${keyFile} is not a service account key (missing client_email or private_key).`);
     }
-    const t = await request<any>(key.token_uri || TOKEN_URL, {
+    // Always Google's endpoint, never the key file's token_uri: a tampered key must not redirect the signed assertion.
+    const t = await request<any>(TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
