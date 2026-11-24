@@ -24,13 +24,11 @@
   "author": "Suganthan Mohanadasan (original author); search-console-mcp contributors",
   "license": "Apache-2.0",
   "dependencies": {
-    "@googleapis/indexing": "^11.0.1",
-    "@googleapis/searchconsole": "^11.0.1",
-    "@modelcontextprotocol/sdk": "^1.32.2",
     "zod": "^4.6.6"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.6",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@types/bun": "^1.4.5",
     "typescript": "7.0.2"
   },

@@ -1,7 +1,6 @@
 #!/usr/bin/env -S bun --no-env-file
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { McpServer, type ToolResult } from "./mcp.js";
 import { z } from "zod";
 
 import { GUARDRAIL_SUFFIX, POSITION_CAVEAT, withMeta } from "./guardrails.js";
@@ -64,18 +63,14 @@ const SITE_URL_PARAM = z
   );
 const NO_PROPERTY_TOOLS = new Set(["multi_site_dashboard", "submit_url", "submit_batch"]);
 
-const registerTool = server.tool.bind(server);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(server as { tool: unknown }).tool = (name: string, description: string, schema: any, handler: any) => {
-  if (NO_PROPERTY_TOOLS.has(name)) return registerTool(name, description, schema, handler);
-  const wrapped = (args: { site_url?: string }, extra: unknown) =>
-    withSiteUrl(args?.site_url, () => handler(args, extra));
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return registerTool(name, description, { ...schema, site_url: SITE_URL_PARAM }, wrapped as any);
-};
+/** Registers a tool; property tools get `site_url` and run inside withSiteUrl(). */
+function tool(name: string, description: string, shape: z.ZodRawShape, handler: (args: any) => ToolResult | Promise<ToolResult>) {
+  if (NO_PROPERTY_TOOLS.has(name)) return server.tool(name, description, shape, handler);
+  server.tool(name, description, { ...shape, site_url: SITE_URL_PARAM }, (args) => withSiteUrl(args.site_url, () => handler(args)));
+}
 
 // 1. Quick Wins
-server.tool(
+tool(
   "quick_wins",
   "Find keywords you're almost ranking for that could be pushed to page one. Returns queries at positions 4-15 with high impressions, sorted by traffic opportunity." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -93,7 +88,7 @@ server.tool(
 );
 
 // 2. CTR Opportunities
-server.tool(
+tool(
   "ctr_opportunities",
   "Find pages with high impressions but CTR significantly below expected for their position. These are title/meta description optimisation candidates." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -110,7 +105,7 @@ server.tool(
 );
 
 // 3. Traffic Drops
-server.tool(
+tool(
   "traffic_drops",
   "Find pages that lost the most traffic recently. Compares current period vs prior period and diagnoses whether each drop is a ranking loss, CTR collapse, or demand decline." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -126,7 +121,7 @@ server.tool(
 );
 
 // 4. Content Gaps
-server.tool(
+tool(
   "content_gaps",
   "Find topics you should create content for. Returns queries where you get impressions but rank beyond position 20, meaning there is search demand but no real content targeting it." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -144,7 +139,7 @@ server.tool(
 );
 
 // 5. Site Snapshot
-server.tool(
+tool(
   "site_snapshot",
   "Get a quick overview of how the site is performing. Returns total clicks, impressions, CTR, and position with a comparison to the prior period." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -160,7 +155,7 @@ server.tool(
 );
 
 // 6. Inspect URL
-server.tool(
+tool(
   "inspect_url",
   "Check if a URL is indexed and why or why not. Returns indexing status, last crawl date, canonical info, robots/noindex issues, and mobile usability in one answer." + GUARDRAIL_SUFFIX,
   {
@@ -176,7 +171,7 @@ server.tool(
 );
 
 // 7. Cannibalization Check
-server.tool(
+tool(
   "cannibalization_check",
   "Find keywords where multiple pages from your site compete against each other. Shows which page ranks higher, the position gap, and combined impressions being split." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -193,7 +188,7 @@ server.tool(
 );
 
 // 8. Content Decay
-server.tool(
+tool(
   "content_decay",
   "Find pages that are slowly dying with consistent traffic decline over three consecutive 30-day periods. One bad month is noise; three consecutive bad months is a problem." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {},
@@ -207,7 +202,7 @@ server.tool(
 );
 
 // 9. Topic Cluster Performance
-server.tool(
+tool(
   "topic_cluster_performance",
   "See how a group of pages performs as a whole. Aggregates clicks, impressions, CTR, and position for all pages matching a URL path pattern, plus top 5 pages and queries." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -224,7 +219,7 @@ server.tool(
 );
 
 // 10. CTR vs Benchmark
-server.tool(
+tool(
   "ctr_vs_benchmark",
   "Compare your actual CTR per page against industry benchmarks by position. Flags pages significantly underperforming for their ranking position." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -241,7 +236,7 @@ server.tool(
 );
 
 // 11. Verify Claim
-server.tool(
+tool(
   "verify_claim",
   "Verify a specific numeric claim against live GSC data. Use this to self-check your analysis before presenting findings. Pass the claim text, the metric to check, the expected value, and optionally a URL or query to filter by. Returns whether the claim is verified and any discrepancy found.",
   {
@@ -261,7 +256,7 @@ server.tool(
 );
 
 // 12. Advanced Search Analytics
-server.tool(
+tool(
   "advanced_search_analytics",
   "Run a custom search analytics query with flexible dimensions and filters. Supports country, device, query, page, searchAppearance and brandedClassification, multi-country / multi-device filter lists, and search type (web/image/video/news/discover/googleNews/webMultimodal). Google rejects some combinations: brandedClassification cannot be combined with a query filter, and webMultimodal cannot be grouped or filtered by query or brandedClassification. For power users who need specific data cuts." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -288,7 +283,7 @@ server.tool(
 );
 
 // 13. Check Alerts
-server.tool(
+tool(
   "check_alerts",
   "Check for SEO alerts: position drops, CTR collapses, click losses, and pages that disappeared from search results. Returns severity-rated alerts so you know what needs attention first." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -307,7 +302,7 @@ server.tool(
 );
 
 // 14. Content Recommendations
-server.tool(
+tool(
   "content_recommendations",
   "Get actionable content recommendations by cross-referencing quick wins, content gaps, and cannibalisation data. Returns prioritised actions: pages to update, content to create, and pages to consolidate." + GUARDRAIL_SUFFIX,
   {
@@ -326,7 +321,7 @@ server.tool(
 // 15. Generate Report
 
 // 16. Multi-Site Dashboard
-server.tool(
+tool(
   "multi_site_dashboard",
   "Health check across multiple GSC properties in one view. Shows clicks, impressions, CTR, and position for each site with period comparison and health status. Agency essential." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -343,7 +338,7 @@ server.tool(
 );
 
 // 17. Submit URL for Indexing
-server.tool(
+tool(
   "submit_url",
   "Submit a URL to Google's Indexing API to request crawling and indexing. Works for notifying Google of new or updated content. Note: Google officially supports this for JobPosting/BroadcastEvent schema but processes all page types." + GUARDRAIL_SUFFIX,
   {
@@ -359,7 +354,7 @@ server.tool(
 );
 
 // 18. Batch Submit URLs
-server.tool(
+tool(
   "submit_batch",
   "Submit up to 200 URLs to Google's Indexing API in one go. Daily quota is 200 URL notifications. Use for bulk indexing requests after publishing multiple pages or a site-wide update." + GUARDRAIL_SUFFIX,
   {
@@ -375,7 +370,7 @@ server.tool(
 );
 
 // 19. Submit Sitemap
-server.tool(
+tool(
   "submit_sitemap",
   "Notify Google of a new or updated sitemap. Triggers Google to recrawl the sitemap and discover new pages." + GUARDRAIL_SUFFIX,
   {
@@ -390,7 +385,7 @@ server.tool(
 );
 
 // 20. List Sitemaps
-server.tool(
+tool(
   "list_sitemaps",
   "List all sitemaps submitted for the site, with status, errors, warnings, and indexed page counts." + GUARDRAIL_SUFFIX,
   {},
@@ -427,7 +422,7 @@ server.tool(
 // 27. Image Content Decay
 
 // 28. Generative AI Conversation Queries
-server.tool(
+tool(
   "genai_conversation_queries",
   "Surface AI-conversation exhaust hiding in your regular query data: bare replies to Google's AI ('yes', 'go on'), 'what about X' pivot follow-ups, conversational questions, AI-visibility tracker probes, and full agent prompts logged as queries. Google counts every AI Mode follow-up as a new query and folds AI Mode/AI Overviews into the web search type, so these fragments carry real impressions, positions and clicks. The dedicated Generative AI report has no query dimension; this is the only query-level AI evidence available anywhere. Classifies every match into seven buckets with landing pages, plus a monthly timeline showing when reply-artefacts first appeared on your site. Treat probe and harness buckets as machine traffic, not demand." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -448,7 +443,7 @@ server.tool(
 // 29. Image Page Audit
 
 // 30. Branded vs Non-Branded
-server.tool(
+tool(
   "branded_vs_non_branded",
   "Split search performance into branded and non-branded traffic using Google's own query classification. Returns clicks, impressions, CTR, position and share for each side, change against the previous period, a daily trend, and the top queries and pages on each side. Only top-level properties with enough query volume are classified, and only from 2026-02-21; when eligible is false the data is unavailable, not zero." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -468,7 +463,7 @@ server.tool(
 );
 
 // 31. Multimodal Search Overview
-server.tool(
+tool(
   "multimodal_search_overview",
   "Performance in multimodal search: Google Lens, Circle to Search on Android, and image uploads in Google Search. Returns totals with change against the previous period, the size of multimodal relative to web search, top pages, countries, devices and a daily trend. Google provides no queries for this surface, so there is no keyword breakdown." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
@@ -497,9 +492,8 @@ async function main() {
     process.exit(0);
   }
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("GSC MCP server v2.5.1 running on stdio");
+  console.error("search-console-mcp v2.5.1 running on stdio");
+  await server.serveStdio();
 }
 
 main().catch((error) => {

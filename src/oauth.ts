@@ -1,10 +1,10 @@
-import { auth as gauth } from "@googleapis/searchconsole";
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as http from "node:http";
 import * as os from "node:os";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { cachedTokenSource, type TokenSource, tokenRequest } from "./google.js";
 import { EMBEDDED_CLIENT_ID, EMBEDDED_CLIENT_SECRET, embeddedClientAvailable } from "./embedded-client.js";
 
 const TOKEN_DIR = path.join(os.homedir(), ".gsc-mcp");
@@ -194,51 +194,66 @@ export function startLocalCallbackServer(port: number, expectedState: string): P
   });
 }
 
-/**
- * Runs the full OAuth2 flow: open browser, catch redirect, exchange code, cache token.
- * Returns an authenticated OAuth2 client.
- */
-export async function authenticateWithOAuth(): Promise<any> {
-  const { clientId, clientSecret } = getOAuthConfig();
-  const callbackPort = 3847;
-  const redirectUri = `http://127.0.0.1:${callbackPort}`;
+const CALLBACK_PORT = 3847;
+const REDIRECT_URI = `http://127.0.0.1:${CALLBACK_PORT}`;
+const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 
-  const oauth2Client = new gauth.OAuth2(clientId, clientSecret, redirectUri);
-
-  // Check for cached token
-  const cachedToken = loadCachedToken();
-  if (cachedToken && !cachedTokenCoversScopes(cachedToken)) {
-    console.error("Cached token is missing scopes the current GSC_SCOPES tier needs, re-authenticating...");
-    return await runBrowserAuth(oauth2Client, callbackPort);
-  }
-  if (cachedToken) {
-    oauth2Client.setCredentials(cachedToken);
-
-    // Check if token needs refresh
-    if (cachedToken.expiry_date && cachedToken.expiry_date < Date.now()) {
-      try {
-        const { credentials } = await oauth2Client.refreshAccessToken();
-        oauth2Client.setCredentials(credentials);
-        saveCachedToken(credentials);
-        console.error("OAuth token refreshed successfully");
-      } catch {
-        console.error("Token refresh failed, re-authenticating...");
-        return await runBrowserAuth(oauth2Client, callbackPort);
-      }
-    } else {
-      console.error("Using cached OAuth token");
-    }
-
-    return oauth2Client;
-  }
-
-  return await runBrowserAuth(oauth2Client, callbackPort);
+/** Google's token response -> the cached format (google-auth-library's, so existing caches keep working). */
+function toCachedToken(t: any, previous: any = {}): any {
+  return {
+    ...previous,
+    access_token: t.access_token,
+    // Google omits refresh_token on refresh responses; keep the one we have.
+    refresh_token: t.refresh_token ?? previous.refresh_token,
+    scope: t.scope ?? previous.scope,
+    token_type: t.token_type ?? "Bearer",
+    expiry_date: Date.now() + (t.expires_in ?? 3600) * 1000,
+  };
 }
 
-async function runBrowserAuth(
-  oauth2Client: any,
-  callbackPort: number
-): Promise<any> {
+/**
+ * OAuth access tokens for the configured client: uses the cached token, refreshes it
+ * when it expires (also mid-session), and falls back to the browser flow when
+ * there is no usable token or the refresh token was revoked.
+ */
+export async function authenticateWithOAuth(): Promise<TokenSource> {
+  const config = getOAuthConfig();
+  let token = loadCachedToken();
+  if (token && !cachedTokenCoversScopes(token)) {
+    console.error("Cached token is missing scopes the current GSC_SCOPES tier needs, re-authenticating...");
+    token = null;
+  }
+  token ??= await runBrowserAuth(config);
+
+  return cachedTokenSource(async () => {
+    if (token.access_token && token.expiry_date && token.expiry_date - 60_000 > Date.now()) {
+      return { token: token.access_token, expiresAt: token.expiry_date };
+    }
+    if (token.refresh_token) {
+      try {
+        token = toCachedToken(
+          await tokenRequest({
+            grant_type: "refresh_token",
+            refresh_token: token.refresh_token,
+            client_id: config.clientId,
+            client_secret: config.clientSecret,
+          }),
+          token
+        );
+        saveCachedToken(token);
+        console.error("OAuth token refreshed successfully");
+        return { token: token.access_token, expiresAt: token.expiry_date };
+      } catch (err) {
+        console.error(`Token refresh failed (${(err as Error).message}), re-authenticating...`);
+      }
+    }
+    token = await runBrowserAuth(config);
+    return { token: token.access_token, expiresAt: token.expiry_date };
+  });
+}
+
+/** Browser sign-in with state (CSRF) and PKCE (S256); returns and caches the new token. */
+async function runBrowserAuth(config: OAuthConfig): Promise<any> {
   // If an auth flow is already running, wait for it instead of starting a second server
   if (activeAuthPromise) {
     console.error("OAuth flow already in progress, waiting for it to complete...");
@@ -248,34 +263,39 @@ async function runBrowserAuth(
   activeAuthPromise = (async () => {
     try {
       const state = randomBytes(16).toString("hex");
-      const authUrl = oauth2Client.generateAuthUrl({
+      const verifier = randomBytes(32).toString("base64url");
+      const authUrl = `${AUTH_URL}?${new URLSearchParams({
+        client_id: config.clientId,
+        redirect_uri: REDIRECT_URI,
+        response_type: "code",
+        scope: scopesForTier(getScopeTier()).join(" "),
         access_type: "offline",
-        state,
-        scope: scopesForTier(getScopeTier()),
         prompt: "consent",
-      });
+        state,
+        code_challenge: createHash("sha256").update(verifier).digest("base64url"),
+        code_challenge_method: "S256",
+      })}`;
 
       // Start callback server before opening browser
-      const codePromise = startLocalCallbackServer(callbackPort, state);
+      const codePromise = startLocalCallbackServer(CALLBACK_PORT, state);
 
-      // Open browser
       console.error(`\nOpening browser for Google authentication...\nIf the browser doesn't open, visit this URL:\n${authUrl}\n`);
-      try {
-        openBrowser(authUrl);
-      } catch {
-        console.error("Could not open browser automatically. Please visit the URL above.");
-      }
+      openBrowser(authUrl);
 
-      // Wait for the code
       const code = await codePromise;
-
-      // Exchange code for tokens
-      const { tokens } = await oauth2Client.getToken(code);
-      oauth2Client.setCredentials(tokens);
-      saveCachedToken(tokens);
+      const token = toCachedToken(
+        await tokenRequest({
+          grant_type: "authorization_code",
+          code,
+          code_verifier: verifier,
+          client_id: config.clientId,
+          client_secret: config.clientSecret,
+          redirect_uri: REDIRECT_URI,
+        })
+      );
+      saveCachedToken(token);
       console.error("OAuth authentication successful, token cached");
-
-      return oauth2Client;
+      return token;
     } finally {
       activeAuthPromise = null;
     }

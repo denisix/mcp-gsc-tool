@@ -1,6 +1,7 @@
-import type { searchconsole_v1 } from "@googleapis/searchconsole";
 import { getSearchConsoleClient, getConfig } from "./auth.js";
 import { propertyCandidates, fallbackNote, permissionHint, isPermissionError } from "./property-candidates.js";
+// Subset of the URL Inspection API response this module reads (https://developers.google.com/webmaster-tools/v1/urlInspection.index/inspect).
+type InspectUrlIndexResponse = { inspectionResult?: any };
 
 export interface InspectionResult {
   siteUrl: string;
@@ -25,7 +26,7 @@ export async function inspectUrl(url: string): Promise<InspectionResult> {
   const { siteUrl: configSiteUrl } = getConfig();
   const candidates = propertyCandidates(configSiteUrl);
 
-  let response: { data: searchconsole_v1.Schema$InspectUrlIndexResponse } | undefined;
+  let response: { data: InspectUrlIndexResponse } | undefined;
   let usedSiteUrl = configSiteUrl;
   let firstError: any = null;
 

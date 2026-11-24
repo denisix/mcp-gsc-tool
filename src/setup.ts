@@ -10,7 +10,7 @@
  * API call goes straight from this machine to Google. Nothing touches any
  * third party server.
  */
-import { searchconsole } from "@googleapis/searchconsole";
+import { searchConsoleClient } from "./google.js";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -280,7 +280,7 @@ export async function runSetup(argv: string[]): Promise<number> {
       console.log("\nOpening your browser for Google sign in...");
       const auth = await authenticateWithOAuth();
 
-      const sc = searchconsole({ version: "v1", auth });
+      const sc = searchConsoleClient(auth);
       const res = await sc.sites.list({});
       const sites = (res.data.siteEntry || []).filter((s) => s.siteUrl);
       console.log(`\nConnected. Your Google account has ${sites.length} Search Console propert${sites.length === 1 ? "y" : "ies"}.`);

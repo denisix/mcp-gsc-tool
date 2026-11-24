@@ -1,4 +1,4 @@
-import { auth as gauth, indexing } from "@googleapis/indexing";
+import { indexingClient, serviceAccountTokenSource } from "../google.js";
 import { getAuthMode } from "../auth.js";
 import { authenticateWithOAuth, getScopeTier } from "../oauth.js";
 import * as fs from "node:fs";
@@ -14,19 +14,15 @@ async function getIndexingClient() {
   }
 
   if (mode === "oauth") {
-    // Pass auth per client: a global googleapis auth would replace the Search Console client's (#15).
-    return indexing({ version: "v3", auth: await authenticateWithOAuth() });
+    // Each client owns its token source; nothing global to clobber the Search Console client (#15).
+    return indexingClient(await authenticateWithOAuth());
   }
 
   const keyFile = process.env.GSC_KEY_FILE;
   if (!keyFile || !fs.existsSync(keyFile)) {
     throw new Error("GSC_KEY_FILE is required for indexing API in service_account mode.");
   }
-  const auth = new gauth.GoogleAuth({
-    keyFile,
-    scopes: ["https://www.googleapis.com/auth/indexing"],
-  });
-  return indexing({ version: "v3", auth });
+  return indexingClient(serviceAccountTokenSource(keyFile, ["https://www.googleapis.com/auth/indexing"]));
 }
 
 interface SubmitResult {
