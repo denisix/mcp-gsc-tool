@@ -103,7 +103,7 @@ OAuth:
 claude mcp add --scope user gsc \
   -e GSC_AUTH_MODE=oauth -e GSC_OAUTH_SECRETS_FILE=/path/to/client_secrets.json \
   -e GSC_SITE_URL=sc-domain:yoursite.com -e GSC_SCOPES=readonly \
-  -- bun /path/to/Suganthans-GSC-MCP/src/index.ts
+  -- bun --no-env-file /path/to/Suganthans-GSC-MCP/src/index.ts
 ```
 
 First use opens a browser for Google sign in; the token is cached owner-only at `~/.gsc-mcp/`.
@@ -113,7 +113,7 @@ Service account (add its email to your GSC property under Settings > Users and p
 ```bash
 claude mcp add --scope user gsc \
   -e GSC_KEY_FILE=/path/to/service-account.json -e GSC_SITE_URL=sc-domain:yoursite.com \
-  -- bun /path/to/Suganthans-GSC-MCP/src/index.ts
+  -- bun --no-env-file /path/to/Suganthans-GSC-MCP/src/index.ts
 ```
 
 ### Generative AI (v2.4)

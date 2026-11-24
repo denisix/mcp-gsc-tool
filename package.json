@@ -15,7 +15,7 @@
     "url": "https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP/issues"
   },
   "scripts": {
-    "start": "bun src/index.ts",
+    "start": "bun --no-env-file src/index.ts",
     "test": "bun test"
   },
   "keywords": [

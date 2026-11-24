@@ -163,7 +163,7 @@ function buildEnv(opts: { scopes: ScopeTier; site: string; secretsPath: string |
 function serverEntry(env: Record<string, string>) {
   return {
     command: "bun",
-    args: [SERVER_ENTRY],
+    args: ["--no-env-file", SERVER_ENTRY],
     env,
   };
 }
@@ -173,7 +173,7 @@ function writeCodeConfig(env: Record<string, string>, force: boolean, dryRun: bo
   for (const [k, v] of Object.entries(env)) {
     envFlags.push("-e", `${k}=${v}`);
   }
-  const addArgs = ["mcp", "add", "--scope", "user", ...envFlags, "gsc", "--", "bun", SERVER_ENTRY];
+  const addArgs = ["mcp", "add", "--scope", "user", ...envFlags, "gsc", "--", "bun", "--no-env-file", SERVER_ENTRY];
   const manualCommand = `claude ${addArgs.map((a) => (a.includes(" ") ? JSON.stringify(a) : a)).join(" ")}`;
 
   if (dryRun) {
