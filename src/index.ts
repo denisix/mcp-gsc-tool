@@ -47,7 +47,7 @@ const filterListsSchema = z
 
 
 const server = new McpServer({
-  name: "gsc-mcp",
+  name: "search-console-mcp",
   version: "2.5.1",
 });
 

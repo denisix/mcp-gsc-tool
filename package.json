@@ -1,18 +1,10 @@
 {
-  "name": "suganthan-gsc-mcp",
+  "name": "search-console-mcp",
   "version": "2.5.1",
-  "description": "Google Search Console MCP server for Claude. 28 SEO analysis tools including quick wins, traffic drops, content decay, cannibalisation, CTR opportunities, multi-site dashboards, and a full image-search suite (image keyword overview, image quick wins, web vs image comparison, image pages overview, image keyword trends, image impressions-no-clicks, image content decay). Generative AI conversation-query detection (v2.4). OAuth and service account support.",
+  "description": "Google Search Console MCP server for Claude Code CLI, run with bun. Fork of Suganthan Mohanadasan's GSC MCP.",
   "main": "src/index.ts",
   "bin": {
-    "suganthan-gsc-mcp": "src/index.ts"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP.git"
-  },
-  "homepage": "https://suganthan.com/blog/google-search-console-mcp-server/",
-  "bugs": {
-    "url": "https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP/issues"
+    "search-console-mcp": "src/index.ts"
   },
   "scripts": {
     "start": "bun --no-env-file src/index.ts",
@@ -25,7 +17,7 @@
     "claude",
     "gsc"
   ],
-  "author": "Suganthan Mohanadasan",
+  "author": "Suganthan Mohanadasan (original author); search-console-mcp contributors",
   "license": "Apache-2.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

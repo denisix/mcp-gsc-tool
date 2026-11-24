@@ -3,3 +3,7 @@ Copyright 2025 Suganthan Mohanadasan
 
 This product was created by Suganthan Mohanadasan (https://suganthan.com).
 Original source: https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP
+
+search-console-mcp
+This is a modified version of the work above (renamed, trimmed to Claude Code CLI on bun,
+community PRs merged, security fixes). Changes are listed in README.md under Changelog.

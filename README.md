@@ -1,14 +1,14 @@
-# Google Search Console MCP Server
+# search-console-mcp
 
-[![GitHub stars](https://img.shields.io/github/stars/Suganthan-Mohanadasan/Suganthans-GSC-MCP?style=flat-square&labelColor=24292f&logo=github&color=305686)](https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP)
-[![Licence](https://img.shields.io/github/license/Suganthan-Mohanadasan/Suganthans-GSC-MCP?style=flat-square&labelColor=24292f&label=licence&color=305686)](LICENSE)
-[![Node version](https://img.shields.io/node/v/suganthan-gsc-mcp?style=flat-square&labelColor=24292f&logo=nodedotjs&logoColor=white&color=305686)](https://nodejs.org/)
+[![Licence: Apache 2.0](https://img.shields.io/badge/licence-Apache%202.0-305686?style=flat-square&labelColor=24292f)](LICENSE)
 
 [![MCP server](https://img.shields.io/badge/MCP-server-305686?style=flat-square&labelColor=24292f&logo=modelcontextprotocol&logoColor=white)](https://modelcontextprotocol.io/)
 [![Claude Code CLI + bun](https://img.shields.io/badge/Claude%20Code-bun-305686?style=flat-square&labelColor=24292f&logo=bun&logoColor=white)](#quick-start-bun--claude-code-cli)
 [![Google Search Console API](https://img.shields.io/badge/Google%20Search%20Console-API-305686?style=flat-square&labelColor=24292f&logo=googlesearchconsole&logoColor=white)](https://developers.google.com/webmaster-tools)
 [![22 tools](https://img.shields.io/badge/tools-22-305686?style=flat-square&labelColor=24292f)](#all-22-tools)
 [![Privacy: local first](https://img.shields.io/badge/privacy-local%20first-305686?style=flat-square&labelColor=24292f&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI%2BPHJlY3Qgd2lkdGg9IjE4IiBoZWlnaHQ9IjExIiB4PSIzIiB5PSIxMSIgcng9IjIiIHJ5PSIyIi8%2BPHBhdGggZD0iTTcgMTFWN2E1IDUgMCAwIDEgMTAgMHY0Ii8%2BPC9zdmc%2BCg%3D%3D)](#what-makes-this-different-from-other-google-search-console-mcp-servers)
+
+> **Credits.** search-console-mcp is a fork of [Suganthan's GSC MCP](https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP) by [Suganthan Mohanadasan](https://suganthan.com/), Apache 2.0. All the original analysis tools are his work. This fork cuts it down for Claude Code CLI on bun, merges the open community PRs, and adds security fixes. See the [changelog](#changelog) and [NOTICE](NOTICE).
 
 An MCP server for Google Search Console that lets you ask Claude questions about your search data and get real answers. Not raw API rows. Actual analysis.
 
@@ -86,8 +86,8 @@ Also on [YouTube](https://www.youtube.com/watch?v=U0FGD6SXQt8).
 Requires [bun](https://bun.sh) and the `claude` CLI. Bun runs the TypeScript directly, no build step.
 
 ```bash
-git clone https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP.git
-cd Suganthans-GSC-MCP && bun install
+git clone <this repository> search-console-mcp
+cd search-console-mcp && bun install
 bun src/index.ts setup
 ```
 
@@ -103,7 +103,7 @@ OAuth:
 claude mcp add --scope user gsc \
   -e GSC_AUTH_MODE=oauth -e GSC_OAUTH_SECRETS_FILE=/path/to/client_secrets.json \
   -e GSC_SITE_URL=sc-domain:yoursite.com -e GSC_SCOPES=readonly \
-  -- bun --no-env-file /path/to/Suganthans-GSC-MCP/src/index.ts
+  -- bun --no-env-file /path/to/search-console-mcp/src/index.ts
 ```
 
 First use opens a browser for Google sign in; the token is cached owner-only at `~/.gsc-mcp/`.
@@ -113,7 +113,7 @@ Service account (add its email to your GSC property under Settings > Users and p
 ```bash
 claude mcp add --scope user gsc \
   -e GSC_KEY_FILE=/path/to/service-account.json -e GSC_SITE_URL=sc-domain:yoursite.com \
-  -- bun --no-env-file /path/to/Suganthans-GSC-MCP/src/index.ts
+  -- bun --no-env-file /path/to/search-console-mcp/src/index.ts
 ```
 
 ### Generative AI (v2.4)
@@ -258,7 +258,9 @@ Apache 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for details. Use it, for
 
 ---
 
-## Built by Suganthan Mohanadasan
+## Original author: Suganthan Mohanadasan
+
+This project builds on [Suganthan's GSC MCP](https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP). Credit for the original server and its analysis tools goes to him.
 
 I write about organic search, AI, and the tools I build on [suganthan.com](https://suganthan.com/).
 
@@ -284,4 +286,4 @@ The [BigQuery MCP Server](https://github.com/Suganthan-Mohanadasan/Suganthans-Bi
 [![Suganthan Mohanadasan on GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Suganthan-Mohanadasan)
 [![Follow Suganthan on Google](https://img.shields.io/badge/Google-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://profile.google.com/cp/Cg0vZy8xMXExX2pkY3Fi)
 
-If you find it useful, star it.
+If you find it useful, star [the original project](https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP).

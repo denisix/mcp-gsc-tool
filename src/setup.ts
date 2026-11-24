@@ -242,7 +242,7 @@ export async function runSetup(argv: string[]): Promise<number> {
       console.log("  1. console.cloud.google.com > create a project > enable the Search Console API");
       console.log("  2. Credentials > Create credentials > OAuth client ID > Desktop app");
       console.log("  3. Download the JSON file");
-      console.log("Full walkthrough: https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP#quick-start\n");
+      console.log("Full walkthrough: see "Quick start" in README.md\n");
       const p = await prompter.ask("Path to your client secrets JSON file: ", "");
       if (!p) {
         console.error("No credentials provided. Re-run setup when you have the JSON file.");
