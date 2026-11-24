@@ -8,3 +8,4 @@ node_modules/
 !manifest.json
 demo-mock/
 probe-platform-properties.mjs
+.env*
