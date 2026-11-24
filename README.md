@@ -197,7 +197,7 @@ You can also point a single call at any property your credentials can see: every
 
 **Fresh data.** Uses `dataState: 'all'` so data matches the GSC dashboard, not 2-3 days stale.
 
-**Proactive, not reactive.** Alerting, content recommendations, and scheduled reports catch problems before you think to look.
+**Proactive, not reactive.** Alerting and content recommendations catch problems before you think to look.
 
 ## Environment variables
 

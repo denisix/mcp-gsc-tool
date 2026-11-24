@@ -16,7 +16,7 @@ export function getAuthMode(): AuthMode {
 
 // Per-call property override. index.ts sets it from a tool's `site_url`
 // argument for the duration of that call; getConfig() then returns it as
-// siteUrl, so nested calls (fetchAllRows, inspectUrl, generate_report) use
+// siteUrl, so nested calls (fetchAllRows, inspectUrl, sitemaps) use
 // the chosen property without every tool function threading it through.
 const siteUrlContext = new AsyncLocalStorage<string>();
 

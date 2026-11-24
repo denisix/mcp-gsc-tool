@@ -89,32 +89,21 @@ function formatDate(date: Date): string {
   return date.toISOString().split("T")[0];
 }
 
-export function getDateRange(days: number): { startDate: string; endDate: string } {
-  const end = new Date();
-  end.setDate(end.getDate() - 1); // yesterday (latest available)
-  const start = new Date(end);
-  start.setDate(start.getDate() - days + 1);
-  return {
-    startDate: formatDate(start),
-    endDate: formatDate(end),
-  };
+// UTC throughout: local setDate() + toISOString() shifted windows by a day across DST changes.
+function daysAgo(n: number, from: Date = new Date()): Date {
+  const d = new Date(from);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d;
 }
 
-export function getPriorDateRange(days: number): { startDate: string; endDate: string } {
-  const currentEnd = new Date();
-  currentEnd.setDate(currentEnd.getDate() - 1);
-  const currentStart = new Date(currentEnd);
-  currentStart.setDate(currentStart.getDate() - days + 1);
+export function getDateRange(days: number, now: Date = new Date()): { startDate: string; endDate: string } {
+  const end = daysAgo(1, now); // yesterday (latest available)
+  return { startDate: formatDate(daysAgo(days - 1, end)), endDate: formatDate(end) };
+}
 
-  const priorEnd = new Date(currentStart);
-  priorEnd.setDate(priorEnd.getDate() - 1);
-  const priorStart = new Date(priorEnd);
-  priorStart.setDate(priorStart.getDate() - days + 1);
-
-  return {
-    startDate: formatDate(priorStart),
-    endDate: formatDate(priorEnd),
-  };
+/** The equal-length window immediately before getDateRange(days). */
+export function getPriorDateRange(days: number, now: Date = new Date()): { startDate: string; endDate: string } {
+  return getDateRange(days, daysAgo(days, now));
 }
 
 /**

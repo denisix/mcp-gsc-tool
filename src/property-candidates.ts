@@ -28,3 +28,8 @@ export function permissionHint(candidates: string[]): string {
     `has permission on the property in Search Console.`
   );
 }
+
+/** Only a 403 means "try the URL-prefix property"; quota, network or bad-input errors must not be retried elsewhere. */
+export function isPermissionError(err: any): boolean {
+  return (err?.status ?? err?.code ?? err?.response?.status) === 403;
+}

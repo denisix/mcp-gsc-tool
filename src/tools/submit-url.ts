@@ -9,25 +9,24 @@ async function getIndexingClient() {
   if (mode === "oauth" && getScopeTier() === "readonly") {
     throw new Error(
       "URL submission needs full access, but this install is in read only mode (GSC_SCOPES=readonly). " +
-      "Re-run `npx suganthan-gsc-mcp setup --reauth` and choose full access, then try again."
+      "Re-run `bun src/index.ts setup --reauth` and choose full access, then try again."
     );
   }
 
   if (mode === "oauth") {
-    // Per-client auth: setting googleapis global options and would clobber the Search Console client (#15).
+    // Pass auth per client: a global googleapis auth would replace the Search Console client's (#15).
     return google.indexing({ version: "v3", auth: await authenticateWithOAuth() });
   }
-  {
-    const keyFile = process.env.GSC_KEY_FILE;
-    if (!keyFile || !fs.existsSync(keyFile)) {
-      throw new Error("GSC_KEY_FILE is required for indexing API in service_account mode.");
-    }
-    const auth = new google.auth.GoogleAuth({
-      keyFile,
-      scopes: ["https://www.googleapis.com/auth/indexing"],
-    });
-    return google.indexing({ version: "v3", auth });
+
+  const keyFile = process.env.GSC_KEY_FILE;
+  if (!keyFile || !fs.existsSync(keyFile)) {
+    throw new Error("GSC_KEY_FILE is required for indexing API in service_account mode.");
   }
+  const auth = new google.auth.GoogleAuth({
+    keyFile,
+    scopes: ["https://www.googleapis.com/auth/indexing"],
+  });
+  return google.indexing({ version: "v3", auth });
 }
 
 interface SubmitResult {

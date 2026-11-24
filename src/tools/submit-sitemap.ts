@@ -1,6 +1,6 @@
 import { getSearchConsoleClient, getConfig, getAuthMode } from "../auth.js";
 import { getScopeTier } from "../oauth.js";
-import { propertyCandidates as sitemapPropertyCandidates, fallbackNote, permissionHint } from "../property-candidates.js";
+import { propertyCandidates as sitemapPropertyCandidates, fallbackNote, permissionHint, isPermissionError } from "../property-candidates.js";
 
 interface SitemapSubmitResult {
   siteUrl: string;
@@ -39,7 +39,7 @@ export async function submitSitemap(sitemapUrl?: string): Promise<SitemapSubmitR
       success: false,
       error:
         "Sitemap submission needs full access, but this install is in read only mode (GSC_SCOPES=readonly). " +
-        "Re-run `npx suganthan-gsc-mcp setup --reauth` and choose full access, then try again.",
+        "Re-run `bun src/index.ts setup --reauth` and choose full access, then try again.",
     };
   }
 
@@ -62,6 +62,7 @@ export async function submitSitemap(sitemapUrl?: string): Promise<SitemapSubmitR
       };
     } catch (err: any) {
       if (!firstError) firstError = err;
+      if (!isPermissionError(err)) break;
     }
   }
 
@@ -105,6 +106,7 @@ export async function listSitemaps(): Promise<SitemapListResult> {
       };
     } catch (err: any) {
       if (!firstError) firstError = err;
+      if (!isPermissionError(err)) break;
     }
   }
 

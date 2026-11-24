@@ -108,7 +108,7 @@ export function getOAuthConfig(): OAuthConfig {
   }
 
   throw new Error(
-    "OAuth credentials not found. Run `npx suganthan-gsc-mcp setup` for guided configuration, " +
+    "OAuth credentials not found. Run `bun src/index.ts setup` for guided configuration, " +
     "or set GSC_OAUTH_CLIENT_ID and GSC_OAUTH_CLIENT_SECRET, " +
     "or set GSC_OAUTH_SECRETS_FILE to a Google OAuth client secrets JSON file."
   );

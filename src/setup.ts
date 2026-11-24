@@ -1,5 +1,5 @@
 /**
- * `npx suganthan-gsc-mcp setup`
+ * `bun src/index.ts setup`
  *
  * Guided setup: authenticates with Google, verifies API access with a live
  * sites.list call, then writes the MCP entry into Claude Code (via `claude mcp add`) or
@@ -42,7 +42,7 @@ interface SetupOptions {
 }
 
 const USAGE = `
-Usage: npx suganthan-gsc-mcp setup [options]
+Usage: bun src/index.ts setup [options]
 
 Guided setup for the GSC MCP server. Signs you in with Google, checks the
 connection works, and writes the config for Claude Code.
@@ -328,7 +328,7 @@ export async function runSetup(argv: string[]): Promise<number> {
       console.log('  "What are my top image search queries?"');
       console.log(`\nToken lives at ${tokenPath()} and never leaves this machine.`);
       console.log("Revoke access any time at https://myaccount.google.com/permissions");
-      console.log("Change access level later by re-running: npx suganthan-gsc-mcp setup --reauth");
+      console.log("Change access level later by re-running: bun src/index.ts setup --reauth");
     }
     return ok ? 0 : 1;
   } catch (err: any) {

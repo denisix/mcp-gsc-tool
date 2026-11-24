@@ -54,8 +54,7 @@ const server = new McpServer({
 // Every tool that queries a property takes an optional `site_url`. The wrapper
 // adds it to the schema and runs the handler inside withSiteUrl(), so
 // getConfig() returns it for the whole call. Excluded: tools with no property
-// in play: the Indexing API (URL-based), image_page_audit (fetches pages
-// directly) and multi_site_dashboard (takes site_urls).
+// in play: the Indexing API (URL-based) and multi_site_dashboard (takes site_urls).
 const SITE_URL_PARAM = z
   .string()
   .optional()

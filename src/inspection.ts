@@ -1,6 +1,6 @@
 import { searchconsole_v1 } from "googleapis";
 import { getSearchConsoleClient, getConfig } from "./auth.js";
-import { propertyCandidates, fallbackNote, permissionHint } from "./property-candidates.js";
+import { propertyCandidates, fallbackNote, permissionHint, isPermissionError } from "./property-candidates.js";
 
 export interface InspectionResult {
   siteUrl: string;
@@ -41,6 +41,7 @@ export async function inspectUrl(url: string): Promise<InspectionResult> {
       break;
     } catch (err: any) {
       if (!firstError) firstError = err;
+      if (!isPermissionError(err)) break;
     }
   }
 
