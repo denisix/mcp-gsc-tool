@@ -84,14 +84,11 @@ async function getServiceAccountClient(): Promise<searchconsole_v1.Searchconsole
     scopes: scopesForTier(getScopeTier()),
   });
 
-  google.options({ auth });
-  return google.searchconsole("v1");
+  return google.searchconsole({ version: "v1", auth });
 }
 
 async function getOAuthClient(): Promise<searchconsole_v1.Searchconsole> {
-  const oauth2Client = await authenticateWithOAuth();
-  google.options({ auth: oauth2Client });
-  return google.searchconsole("v1");
+  return google.searchconsole({ version: "v1", auth: await authenticateWithOAuth() });
 }
 
 export async function getSearchConsoleClient(): Promise<searchconsole_v1.Searchconsole> {

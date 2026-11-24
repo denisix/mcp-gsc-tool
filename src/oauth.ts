@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as http from "http";
 import * as os from "os";
+import { randomBytes } from "crypto";
 import { EMBEDDED_CLIENT_ID, EMBEDDED_CLIENT_SECRET, embeddedClientAvailable } from "./embedded-client.js";
 
 const TOKEN_DIR = path.join(os.homedir(), ".gsc-mcp");
@@ -52,7 +53,7 @@ let activeAuthPromise: Promise<any> | null = null;
 
 function ensureTokenDir(): void {
   if (!fs.existsSync(TOKEN_DIR)) {
-    fs.mkdirSync(TOKEN_DIR, { recursive: true });
+    fs.mkdirSync(TOKEN_DIR, { recursive: true, mode: 0o700 });
   }
 }
 
@@ -70,7 +71,8 @@ export function loadCachedToken(): any | null {
 
 export function saveCachedToken(token: any): void {
   ensureTokenDir();
-  fs.writeFileSync(TOKEN_PATH, JSON.stringify(token, null, 2), "utf8");
+  fs.writeFileSync(TOKEN_PATH, JSON.stringify(token, null, 2), { encoding: "utf8", mode: 0o600 });
+  fs.chmodSync(TOKEN_PATH, 0o600); // mode only applies on create; tighten tokens written by older versions too
 }
 
 interface OAuthConfig {
@@ -132,12 +134,19 @@ function cachedTokenCoversScopes(cachedToken: any): boolean {
  * Starts a one-shot local HTTP server to capture the OAuth redirect.
  * Returns the authorization code.
  */
-function startLocalCallbackServer(port: number): Promise<string> {
+export function startLocalCallbackServer(port: number, expectedState: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url || "/", `http://localhost:${port}`);
       const code = url.searchParams.get("code");
       const error = url.searchParams.get("error");
+
+      // CSRF guard: ignore any callback that doesn't carry our state, so a stray page can't inject or abort the login.
+      if (url.searchParams.get("state") !== expectedState) {
+        res.writeHead(400);
+        res.end("Invalid state");
+        return;
+      }
 
       if (error) {
         res.writeHead(200, { "Content-Type": "text/html" });
@@ -169,7 +178,7 @@ function startLocalCallbackServer(port: number): Promise<string> {
     setTimeout(() => {
       server.close();
       reject(new Error("OAuth authentication timed out after 2 minutes"));
-    }, 120000);
+    }, 120000).unref();
   });
 }
 
@@ -227,14 +236,16 @@ async function runBrowserAuth(
 
   activeAuthPromise = (async () => {
     try {
+      const state = randomBytes(16).toString("hex");
       const authUrl = oauth2Client.generateAuthUrl({
         access_type: "offline",
+        state,
         scope: scopesForTier(getScopeTier()),
         prompt: "consent",
       });
 
       // Start callback server before opening browser
-      const codePromise = startLocalCallbackServer(callbackPort);
+      const codePromise = startLocalCallbackServer(callbackPort, state);
 
       // Open browser
       console.error(`\nOpening browser for Google authentication...\nIf the browser doesn't open, visit this URL:\n${authUrl}\n`);

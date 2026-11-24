@@ -10,6 +10,7 @@
  * API call goes straight from this machine to Google. Nothing touches any
  * third party server.
  */
+import { fileURLToPath } from "url";
 import { google } from "googleapis";
 import * as fs from "fs";
 import * as os from "os";
@@ -17,12 +18,16 @@ import * as path from "path";
 import * as readline from "node:readline/promises";
 import { spawnSync } from "child_process";
 import {
+
   authenticateWithOAuth,
   clearCachedToken,
   tokenPath,
   ScopeTier,
 } from "./oauth.js";
 import { embeddedClientAvailable } from "./embedded-client.js";
+
+// Register this checkout directly: bun runs the TypeScript, no build step.
+const SERVER_ENTRY = fileURLToPath(new URL("./index.ts", import.meta.url));
 
 interface SetupOptions {
   client: "code" | "print" | null;
@@ -157,8 +162,8 @@ function buildEnv(opts: { scopes: ScopeTier; site: string; secretsPath: string |
 
 function serverEntry(env: Record<string, string>) {
   return {
-    command: "npx",
-    args: ["-y", "suganthan-gsc-mcp"],
+    command: "bun",
+    args: [SERVER_ENTRY],
     env,
   };
 }
@@ -168,7 +173,7 @@ function writeCodeConfig(env: Record<string, string>, force: boolean, dryRun: bo
   for (const [k, v] of Object.entries(env)) {
     envFlags.push("-e", `${k}=${v}`);
   }
-  const addArgs = ["mcp", "add", "--scope", "user", ...envFlags, "gsc", "--", "npx", "-y", "suganthan-gsc-mcp"];
+  const addArgs = ["mcp", "add", "--scope", "user", ...envFlags, "gsc", "--", "bun", SERVER_ENTRY];
   const manualCommand = `claude ${addArgs.map((a) => (a.includes(" ") ? JSON.stringify(a) : a)).join(" ")}`;
 
   if (dryRun) {

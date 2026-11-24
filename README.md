@@ -1,20 +1,18 @@
 # Google Search Console MCP Server
 
-[![npm version](https://img.shields.io/npm/v/suganthan-gsc-mcp?style=flat-square&labelColor=24292f&logo=npm&logoColor=white&label=npm&color=305686)](https://www.npmjs.com/package/suganthan-gsc-mcp)
-[![npm downloads](https://img.shields.io/npm/d18m/suganthan-gsc-mcp?style=flat-square&labelColor=24292f&label=downloads&color=305686)](https://www.npmjs.com/package/suganthan-gsc-mcp)
 [![GitHub stars](https://img.shields.io/github/stars/Suganthan-Mohanadasan/Suganthans-GSC-MCP?style=flat-square&labelColor=24292f&logo=github&color=305686)](https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP)
 [![Licence](https://img.shields.io/github/license/Suganthan-Mohanadasan/Suganthans-GSC-MCP?style=flat-square&labelColor=24292f&label=licence&color=305686)](LICENSE)
 [![Node version](https://img.shields.io/node/v/suganthan-gsc-mcp?style=flat-square&labelColor=24292f&logo=nodedotjs&logoColor=white&color=305686)](https://nodejs.org/)
 
 [![MCP server](https://img.shields.io/badge/MCP-server-305686?style=flat-square&labelColor=24292f&logo=modelcontextprotocol&logoColor=white)](https://modelcontextprotocol.io/)
-[![Works with Claude Desktop and Claude Code](https://img.shields.io/badge/Claude-Desktop%20%2B%20Code-305686?style=flat-square&labelColor=24292f&logo=claude&logoColor=white)](#quick-start)
+[![Claude Code CLI + bun](https://img.shields.io/badge/Claude%20Code-bun-305686?style=flat-square&labelColor=24292f&logo=bun&logoColor=white)](#quick-start-bun--claude-code-cli)
 [![Google Search Console API](https://img.shields.io/badge/Google%20Search%20Console-API-305686?style=flat-square&labelColor=24292f&logo=googlesearchconsole&logoColor=white)](https://developers.google.com/webmaster-tools)
-[![31 tools](https://img.shields.io/badge/tools-31-305686?style=flat-square&labelColor=24292f)](#all-31-tools)
+[![22 tools](https://img.shields.io/badge/tools-22-305686?style=flat-square&labelColor=24292f)](#all-22-tools)
 [![Privacy: local first](https://img.shields.io/badge/privacy-local%20first-305686?style=flat-square&labelColor=24292f&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI%2BPHJlY3Qgd2lkdGg9IjE4IiBoZWlnaHQ9IjExIiB4PSIzIiB5PSIxMSIgcng9IjIiIHJ5PSIyIi8%2BPHBhdGggZD0iTTcgMTFWN2E1IDUgMCAwIDEgMTAgMHY0Ii8%2BPC9zdmc%2BCg%3D%3D)](#what-makes-this-different-from-other-google-search-console-mcp-servers)
 
 An MCP server for Google Search Console that lets you ask Claude questions about your search data and get real answers. Not raw API rows. Actual analysis.
 
-31 tools. OAuth or service account. Free and open source. Runs on your machine: your data goes straight from this computer to Google, and nothing passes through anyone else's servers.
+22 tools for Claude Code CLI, run with bun. OAuth or service account. Free and open source. Runs on your machine: your data goes straight from this computer to Google, and nothing passes through anyone else's servers.
 
 https://github.com/user-attachments/assets/ef131907-4461-4c6a-8080-770f8162dbf2
 
@@ -22,7 +20,6 @@ Also on [YouTube](https://www.youtube.com/watch?v=U0FGD6SXQt8).
 
 > **Full setup guide with screenshots:** [suganthan.com/blog/google-search-console-mcp-server/](https://suganthan.com/blog/google-search-console-mcp-server/)
 
-> **v2.5.0 update (August 2026):** new tool `image_page_audit` closes the image SEO loop. The v2.3 suite tells you which pages fail in image search; this one fetches those pages from your own site and tells you why: alt text, filenames, dimension attributes, lazy loading on the LCP image, formats and weights, the ~250x200 indexing minimum, ImageObject/licensable schema, max-image-preview, and the metadata inside the image files (camera EXIF to strip, IPTC to keep, DigitalSourceType on AI images). It only ever fetches the URLs you give it. Launch post with the whole 8-tool workflow on real client data: ["One Page Earned 102,657 Image Impressions and 2 Clicks"](https://suganthan.com/blog/gsc-mcp-image-seo-tools/).
 
 > **v2.4.0 update (August 2026):** new tool `genai_conversation_queries` finds the AI conversations leaking into your query report. People reply to Google's AI with things like "yes, go on", Google logs every follow-up as a new query, and this tool sorts all of it into seven classified buckets with landing pages and a monthly timeline. Full method and findings: ["Yes, Go On": The AI Conversations Leaking Into Your Search Console](https://suganthan.com/blog/ai-mode-queries-search-console/).
 
@@ -30,7 +27,6 @@ Also on [YouTube](https://www.youtube.com/watch?v=U0FGD6SXQt8).
 
 **"Audit the images on these pages"**
 
-![Per-image findings from image_page_audit: alt status, filename, loading, weight and metadata per image, with an ordered fix list per page](screenshots/image-page-audit.jpg)
 
 **"Which of my queries are actually AI conversations?"**
 
@@ -85,72 +81,39 @@ Also on [YouTube](https://www.youtube.com/watch?v=U0FGD6SXQt8).
 "Verify that claim about my homepage clicks"
 ```
 
-## Quick start
+## Quick start (bun + Claude Code CLI)
 
-### One command setup (new in v2.3)
+Requires [bun](https://bun.sh) and the `claude` CLI. Bun runs the TypeScript directly, no build step.
 
 ```bash
-npx -y suganthan-gsc-mcp setup
+git clone https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP.git
+cd Suganthans-GSC-MCP && bun install
+bun src/index.ts setup
 ```
 
-The wizard signs you in with Google, verifies the connection with a live API call, lets you pick your property from a list, and writes the config for Claude Desktop and Claude Code. No config files to edit.
+The wizard signs you in with Google, verifies the connection, lets you pick a property, and runs `claude mcp add` pointing at this checkout. Read only by default; choose full access for the sitemap and URL submission tools. You need your own Google OAuth client JSON (Google Cloud > enable **Search Console API** > Credentials > OAuth client ID > **Desktop app**).
 
-Read only by default: the standard consent screen asks for a single view permission. Choose full access during setup if you want the sitemap and URL submission tools.
+Flags: `--client code|print`, `--scopes readonly|full`, `--site <property>`, `--secrets <path>`, `--reauth`, `--force`, `--dry-run`, `--help`.
 
-For now you still need your own Google OAuth client JSON one time (steps 1 to 3 under Manual OAuth below); the wizard takes it from there. Built in Google sign in, with no Google Cloud steps at all, ships the moment Google finishes verifying the shared client.
+### Manual registration
 
-Useful flags: `--client desktop|code|both|print`, `--scopes readonly|full`, `--site <property>`, `--secrets <path>`, `--reauth`, `--force`, `--dry-run`, `--help`.
+OAuth:
 
-### One click desktop install
-
-Prefer no terminal at all? Download the `.mcpb` bundle from the [releases page](https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP/releases) and double click it. Claude Desktop installs the server with a small settings screen.
-
-### Option A: OAuth (manual)
-
-1. Create a Google Cloud project and enable the **Search Console API**
-2. Go to **Credentials > Create Credentials > OAuth client ID**, choose **Desktop app**
-3. Download the client secrets JSON
-4. Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "gsc": {
-      "command": "npx",
-      "args": ["-y", "suganthan-gsc-mcp"],
-      "env": {
-        "GSC_AUTH_MODE": "oauth",
-        "GSC_OAUTH_SECRETS_FILE": "/path/to/client_secrets.json",
-        "GSC_SITE_URL": "sc-domain:yoursite.com",
-        "GSC_SCOPES": "readonly"
-      }
-    }
-  }
-}
+```bash
+claude mcp add --scope user gsc \
+  -e GSC_AUTH_MODE=oauth -e GSC_OAUTH_SECRETS_FILE=/path/to/client_secrets.json \
+  -e GSC_SITE_URL=sc-domain:yoursite.com -e GSC_SCOPES=readonly \
+  -- bun /path/to/Suganthans-GSC-MCP/src/index.ts
 ```
 
-First use opens a browser for Google sign in. Token is cached after that (locally, at `~/.gsc-mcp/`). Set `GSC_SCOPES` to `full` if you want the submission tools; omit it and you get full access, matching pre 2.3 behaviour. Running from a git checkout instead of npm? Use `"command": "node", "args": ["/path/to/Suganthans-GSC-MCP/dist/index.js"]`.
+First use opens a browser for Google sign in; the token is cached owner-only at `~/.gsc-mcp/`.
 
-### Option B: Service Account
+Service account (add its email to your GSC property under Settings > Users and permissions):
 
-1. Create a Google Cloud project and enable the **Search Console API**
-2. Go to **IAM & Admin > Service Accounts**, create one, download the JSON key
-3. Add the service account email to your GSC property (Settings > Users and permissions > Full access)
-4. Add to your Claude Desktop config:
-
-```json
-{
-  "mcpServers": {
-    "gsc": {
-      "command": "node",
-      "args": ["/path/to/Suganthans-GSC-MCP/dist/index.js"],
-      "env": {
-        "GSC_KEY_FILE": "/path/to/service-account.json",
-        "GSC_SITE_URL": "sc-domain:yoursite.com"
-      }
-    }
-  }
-}
+```bash
+claude mcp add --scope user gsc \
+  -e GSC_KEY_FILE=/path/to/service-account.json -e GSC_SITE_URL=sc-domain:yoursite.com \
+  -- bun /path/to/Suganthans-GSC-MCP/src/index.ts
 ```
 
 ### Generative AI (v2.4)
@@ -181,9 +144,9 @@ For multiple properties, add `GSC_SITE_URLS`:
 }
 ```
 
-You can also point a single call at any property your credentials can see without touching the config: every tool that queries a property takes an optional `site_url` parameter, `quick_wins` and `inspect_url` included. Only `submit_url` and `submit_batch` (the Indexing API is URL-based), `image_page_audit` (fetches pages directly) and `multi_site_dashboard` (takes `site_urls`) go without it. Each result names the property it ran against in `_meta.site_url`. "Which pages get image impressions but no clicks on sc-domain:secondsite.com?" just works.
+You can also point a single call at any property your credentials can see: every tool that queries a property takes an optional `site_url` parameter. Only `submit_url`/`submit_batch` (URL-based) and `multi_site_dashboard` (takes `site_urls`) go without it. Each result names the property in `_meta.site_url`.
 
-## All 31 tools
+## All 22 tools
 
 ### Analysis
 
@@ -204,23 +167,7 @@ You can also point a single call at any property your credentials can see withou
 | `advanced_search_analytics` | Custom queries with flexible dimensions and filters, including `brandedClassification`, multi-country / multi-device `filter_lists`, and `search_type: webMultimodal` |
 | `branded_vs_non_branded` | Branded vs non-branded split from Google's own classification: totals, share, change vs the previous period, daily trend, top queries and pages per side |
 | `multimodal_search_overview` | Google Lens, Circle to Search and image-upload performance: totals, size relative to web, top pages, countries, devices, daily trend |
-| `generate_report` | Full markdown report saved to disk |
 | `multi_site_dashboard` | Health check across all properties in one command |
-
-### Image SEO (v2.3 + v2.5)
-
-These tools pass `type=image` to the GSC Search Analytics API, which most third-party tools never expose. They cover the visual-search surface end-to-end.
-
-| Tool | What it answers |
-|---|---|
-| `image_keyword_overview` | Top image-search queries on the site, sorted by impressions, clicks, or position |
-| `image_search_quick_wins` | Image queries at positions 4-15 with high impressions, scored by image-CTR opportunity. The CTR baseline is calibrated for image search, which runs roughly 5-6x lower than web at equivalent positions |
-| `compare_web_vs_image` | Same query, side-by-side performance across web and image surfaces, with an impressions ratio that surfaces where image search carries disproportionate volume |
-| `image_pages_overview` | Pages on the site ranked by image-search performance. Pairs with `image_keyword_overview` to map queries back to the pages carrying them |
-| `image_keyword_trends` | Period-over-period deltas for image-search queries. Impressions delta and position delta (negative position delta means the query improved its average rank) |
-| `image_impressions_no_clicks` | Query and page pairs earning meaningful image impressions but near-zero clicks. The textbook thumbnail-not-converting pattern |
-| `image_content_decay` | Image-search version of `content_decay`. Pages losing image-search traffic across 3 consecutive 30-day periods, sorted by total click loss |
-| `image_page_audit` | Fetches pages from your own site and audits every image on them: alt text, filenames, width/height attributes, lazy loading on the LCP candidate, srcset, format and weight, intrinsic dimensions vs the ~250x200 indexing minimum, ImageObject and licensable schema, max-image-preview, and in-file metadata (camera EXIF, IPTC editorial fields, XMP DigitalSourceType). The bridge from "which pages fail" to "why they fail" (v2.5) |
 
 ### Indexing
 
@@ -237,10 +184,6 @@ These tools pass `type=image` to the GSC Search Analytics API, which most third-
 |---|---|
 | `verify_claim` | Self-check: re-queries GSC data to verify a numeric claim before presenting it |
 
-**Fetch and file limits.** Two tools touch more than the Search Console API, and both are bounded so an agent steered by prompt-injected content cannot turn them against the machine they run on:
-
-- `image_page_audit` only audits pages on a Search Console property this account can see (plus any set in `GSC_SITE_URL` / `GSC_SITE_URLS`). Images may come from any host, but no request and no redirect hop may go to a private, loopback, link-local or otherwise non-public address, and page and image bodies are size-capped. Refused URLs come back as `fetch_refused` with the reason.
-- `generate_report` takes a file name, not a path. Reports go into `GSC_REPORT_DIR` (or the server's working directory) and never overwrite an existing file.
 
 ## What makes this different from other Google Search Console MCP servers
 
@@ -250,7 +193,7 @@ These tools pass `type=image` to the GSC Search Analytics API, which most third-
 
 **Hallucination guardrails.** Every tool instructs Claude to base analysis only on returned data. Provenance metadata in every response. The `verify_claim` tool lets Claude fact-check its own numbers. Credit to [Krinal Mehta](https://www.linkedin.com/in/krinal/) for pushing this.
 
-**Visual dashboards.** Results render as rich, interactive visualisations in Claude Desktop. Summary cards, colour coded indicators, bar charts, and tabbed sections. Not plain text dumps.
+**Terminal friendly.** Built for Claude Code CLI: results come back as plain JSON for Claude to summarise.
 
 **Fresh data.** Uses `dataState: 'all'` so data matches the GSC dashboard, not 2-3 days stale.
 
@@ -267,7 +210,6 @@ These tools pass `type=image` to the GSC Search Analytics API, which most third-
 | `GSC_OAUTH_CLIENT_SECRET` | OAuth mode (alt) | OAuth client secret |
 | `GSC_SITE_URL` | Yes | Primary GSC property URL |
 | `GSC_SITE_URLS` | No | Comma-separated list for multi-site |
-| `GSC_REPORT_DIR` | No | Folder `generate_report` writes into (default: the server's working directory) |
 | `GSC_SCOPES` | No | `readonly` or `full` (default: `full`). Read only keeps the Google consent to a single view permission; submission tools then explain how to upgrade |
 
 ## Full guide
@@ -277,6 +219,8 @@ Step-by-step setup with screenshots, use cases, and examples:
 **[suganthan.com/blog/google-search-console-mcp-server/](https://suganthan.com/blog/google-search-console-mcp-server/)**
 
 ## Changelog
+
+**Unreleased (audit-fixes)** Claude Code CLI + bun only: runs `src/index.ts` directly with bun (no `dist/`, no tsc, no npm), setup registers via `claude mcp add`. Removed `generate_report`, the image-search tools, `image_page_audit`, Claude Desktop setup and the `.mcpb` bundle. Merged PRs #16 (`site_url` on every tool), #17 (dependency advisories, #12), #18, #19 (`inspect_url` URL-prefix fallback), #20 (branded / multimodal / filter lists). Fixed #15 (Indexing calls no longer replace the Search Console auth). OAuth callback now checks `state`; token file is owner-only (0600).
 
 **Unreleased** Support for the [Search Analytics API additions of 16 November 2026](https://developers.google.com/search/blog/2026/11/search-analytics-api-update). `branded_vs_non_branded` uses the new `brandedClassification` dimension to split performance into branded and non-branded traffic with Google's own classification, rather than a regex you maintain. `multimodal_search_overview` reads `type=webMultimodal` (Google Lens, Circle to Search on Android, image uploads in Search). `advanced_search_analytics` gains `filter_lists` for multi-country and multi-device filtering in one call (the API's `filterLists`), accepts `brandedClassification` and `searchAppearance` as dimensions and filters, and accepts `search_type: webMultimodal`. Limits that come from Google, verified against the live API: branded data starts on 2026-02-21 and exists only for top-level properties with enough volume (ineligible properties return no rows, reported as `eligible: false`); `brandedClassification` cannot be combined with a query filter; multimodal search cannot be grouped or filtered by query or by `brandedClassification`; filter lists accept only `country` and `device`, and a dimension cannot appear in both a filter and a filter list.
 

@@ -9,3 +9,4 @@ node_modules/
 demo-mock/
 probe-platform-properties.mjs
 .env*
+dist/

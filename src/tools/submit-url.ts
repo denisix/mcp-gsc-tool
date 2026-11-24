@@ -14,9 +14,10 @@ async function getIndexingClient() {
   }
 
   if (mode === "oauth") {
-    const oauth2Client = await authenticateWithOAuth();
-    google.options({ auth: oauth2Client });
-  } else {
+    // Per-client auth: setting googleapis global options and would clobber the Search Console client (#15).
+    return google.indexing({ version: "v3", auth: await authenticateWithOAuth() });
+  }
+  {
     const keyFile = process.env.GSC_KEY_FILE;
     if (!keyFile || !fs.existsSync(keyFile)) {
       throw new Error("GSC_KEY_FILE is required for indexing API in service_account mode.");
@@ -25,10 +26,8 @@ async function getIndexingClient() {
       keyFile,
       scopes: ["https://www.googleapis.com/auth/indexing"],
     });
-    google.options({ auth });
+    return google.indexing({ version: "v3", auth });
   }
-
-  return google.indexing("v3");
 }
 
 interface SubmitResult {
