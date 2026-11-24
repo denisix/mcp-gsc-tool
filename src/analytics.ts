@@ -110,9 +110,24 @@ export function getPriorDateRange(days: number, now: Date = new Date()): { start
  * Fetches all rows from the Search Analytics API with automatic pagination.
  * Uses dataState: 'all' so data matches the GSC dashboard exactly.
  */
+// Identical queries already in flight share one paginated download (e.g. content_recommendations runs
+// quick_wins and content_gaps in parallel over the same report). Entries live only while the request does.
+const inflight = new Map<string, Promise<SearchAnalyticsRow[]>>();
+
 export async function fetchAllRows(params: QueryParams): Promise<SearchAnalyticsRow[]> {
-  const client = await getSearchConsoleClient();
   const { siteUrl } = getConfig();
+  const key = JSON.stringify([siteUrl, params]);
+  let pending = inflight.get(key);
+  if (!pending) {
+    pending = fetchAllRowsUncached(params, siteUrl!).finally(() => inflight.delete(key));
+    inflight.set(key, pending);
+  }
+  // Copies: callers sort and mutate their rows in place.
+  return (await pending).map((r) => ({ ...r, keys: [...r.keys] }));
+}
+
+async function fetchAllRowsUncached(params: QueryParams, siteUrl: string): Promise<SearchAnalyticsRow[]> {
+  const client = await getSearchConsoleClient();
   const allRows: SearchAnalyticsRow[] = [];
   const pageSize = params.rowLimit || 25000;
   let startRow = 0;

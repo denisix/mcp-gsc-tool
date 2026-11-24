@@ -1,6 +1,5 @@
-import { google } from "googleapis";
-import { searchconsole_v1 } from "googleapis";
-import * as fs from "fs";
+import { auth as gauth, searchconsole, type searchconsole_v1 } from "@googleapis/searchconsole";
+import * as fs from "node:fs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { authenticateWithOAuth, getScopeTier, scopesForTier } from "./oauth.js";
 
@@ -79,16 +78,16 @@ async function getServiceAccountClient(): Promise<searchconsole_v1.Searchconsole
 
   // Same scope set as the OAuth flow, including auth/indexing on the full
   // tier so submit_url / submit_batch work in service-account mode too (#2).
-  const auth = new google.auth.GoogleAuth({
+  const auth = new gauth.GoogleAuth({
     keyFile,
     scopes: scopesForTier(getScopeTier()),
   });
 
-  return google.searchconsole({ version: "v1", auth });
+  return searchconsole({ version: "v1", auth });
 }
 
 async function getOAuthClient(): Promise<searchconsole_v1.Searchconsole> {
-  return google.searchconsole({ version: "v1", auth: await authenticateWithOAuth() });
+  return searchconsole({ version: "v1", auth: await authenticateWithOAuth() });
 }
 
 export async function getSearchConsoleClient(): Promise<searchconsole_v1.Searchconsole> {

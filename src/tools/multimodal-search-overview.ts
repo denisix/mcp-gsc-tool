@@ -3,8 +3,8 @@ import {
   getDateRange,
   getPriorDateRange,
   buildFilterGroups,
-  DimensionFilterList,
-  SearchAnalyticsRow,
+  type DimensionFilterList,
+  type SearchAnalyticsRow,
 } from "../analytics.js";
 
 interface Totals {

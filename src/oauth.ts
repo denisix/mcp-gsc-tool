@@ -1,9 +1,10 @@
-import { google } from "googleapis";
-import * as fs from "fs";
-import * as path from "path";
-import * as http from "http";
-import * as os from "os";
-import { randomBytes } from "crypto";
+import { auth as gauth } from "@googleapis/searchconsole";
+import { spawn } from "node:child_process";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as http from "node:http";
+import * as os from "node:os";
+import { randomBytes } from "node:crypto";
 import { EMBEDDED_CLIENT_ID, EMBEDDED_CLIENT_SECRET, embeddedClientAvailable } from "./embedded-client.js";
 
 const TOKEN_DIR = path.join(os.homedir(), ".gsc-mcp");
@@ -134,6 +135,17 @@ function cachedTokenCoversScopes(cachedToken: any): boolean {
  * Starts a one-shot local HTTP server to capture the OAuth redirect.
  * Returns the authorization code.
  */
+/** Opens url in the default browser. Args are passed without a shell, so the URL is never interpreted. */
+function openBrowser(url: string): void {
+  const [cmd, ...args] =
+    process.platform === "darwin" ? ["open", url]
+    : process.platform === "win32" ? ["rundll32", "url.dll,FileProtocolHandler", url] // not `start`: cmd would split on &
+    : ["xdg-open", url];
+  const child = spawn(cmd, args, { stdio: "ignore", detached: true });
+  child.on("error", () => console.error("Could not open browser automatically. Please visit the URL above."));
+  child.unref();
+}
+
 export function startLocalCallbackServer(port: number, expectedState: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
@@ -191,13 +203,13 @@ export async function authenticateWithOAuth(): Promise<any> {
   const callbackPort = 3847;
   const redirectUri = `http://127.0.0.1:${callbackPort}`;
 
-  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+  const oauth2Client = new gauth.OAuth2(clientId, clientSecret, redirectUri);
 
   // Check for cached token
   const cachedToken = loadCachedToken();
   if (cachedToken && !cachedTokenCoversScopes(cachedToken)) {
     console.error("Cached token is missing scopes the current GSC_SCOPES tier needs, re-authenticating...");
-    return await runBrowserAuth(oauth2Client, callbackPort, redirectUri);
+    return await runBrowserAuth(oauth2Client, callbackPort);
   }
   if (cachedToken) {
     oauth2Client.setCredentials(cachedToken);
@@ -211,7 +223,7 @@ export async function authenticateWithOAuth(): Promise<any> {
         console.error("OAuth token refreshed successfully");
       } catch {
         console.error("Token refresh failed, re-authenticating...");
-        return await runBrowserAuth(oauth2Client, callbackPort, redirectUri);
+        return await runBrowserAuth(oauth2Client, callbackPort);
       }
     } else {
       console.error("Using cached OAuth token");
@@ -220,13 +232,12 @@ export async function authenticateWithOAuth(): Promise<any> {
     return oauth2Client;
   }
 
-  return await runBrowserAuth(oauth2Client, callbackPort, redirectUri);
+  return await runBrowserAuth(oauth2Client, callbackPort);
 }
 
 async function runBrowserAuth(
   oauth2Client: any,
-  callbackPort: number,
-  redirectUri: string
+  callbackPort: number
 ): Promise<any> {
   // If an auth flow is already running, wait for it instead of starting a second server
   if (activeAuthPromise) {
@@ -250,8 +261,7 @@ async function runBrowserAuth(
       // Open browser
       console.error(`\nOpening browser for Google authentication...\nIf the browser doesn't open, visit this URL:\n${authUrl}\n`);
       try {
-        const open = (await import("open")).default;
-        await open(authUrl);
+        openBrowser(authUrl);
       } catch {
         console.error("Could not open browser automatically. Please visit the URL above.");
       }

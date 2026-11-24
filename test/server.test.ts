@@ -1,8 +1,20 @@
 // Spawns the real server over stdio and talks MCP to it.
-import { test, expect } from "bun:test";
+import { test, expect, beforeAll } from "bun:test";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
-async function rpc(messages: object[]): Promise<Map<number, any>> {
-  const proc = Bun.spawn(["bun", "--no-env-file", "src/index.ts"], {
+// The bundle is built into an empty temp dir, so it must run without node_modules.
+const outdir = fs.mkdtempSync(path.join(os.tmpdir(), "scm-build-"));
+const entries = { source: "src/index.ts", bundle: path.join(outdir, "index.js") };
+beforeAll(async () => {
+  const r = await Bun.build({ entrypoints: ["src/index.ts"], target: "bun", minify: true, outdir });
+  if (!r.success) throw new AggregateError(r.logs, "bun build failed");
+});
+
+async function rpc(messages: object[], entry: string): Promise<Map<number, any>> {
+  const proc = Bun.spawn(["bun", "--no-env-file", entry], {
+    cwd: entry === entries.bundle ? outdir : undefined,
     stdin: "pipe", stdout: "pipe", stderr: "ignore",
     env: { ...process.env, GSC_SITE_URL: "sc-domain:x.com", GSC_KEY_FILE: "/nonexistent", GSC_AUTH_MODE: "service_account" },
   });
@@ -17,8 +29,9 @@ const init = [
   { jsonrpc: "2.0", method: "notifications/initialized" },
 ];
 
-test("registers the CLI tool set with site_url where it belongs", async () => {
-  const res = await rpc([...init, { jsonrpc: "2.0", id: 2, method: "tools/list" }]);
+for (const [kind, entry] of Object.entries(entries)) {
+test(`${kind}: registers the CLI tool set with site_url where it belongs`, async () => {
+  const res = await rpc([...init, { jsonrpc: "2.0", id: 2, method: "tools/list" }], entry);
   const tools: any[] = res.get(2).result.tools;
   const names = tools.map((t) => t.name);
   expect(names).toHaveLength(22);
@@ -30,9 +43,10 @@ test("registers the CLI tool set with site_url where it belongs", async () => {
   }
 }, 20_000);
 
-test("rejects invalid arguments before touching Google", async () => {
-  const res = await rpc([...init, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "quick_wins", arguments: { days: "lots" } } }]);
+test(`${kind}: rejects invalid arguments before touching Google`, async () => {
+  const res = await rpc([...init, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "quick_wins", arguments: { days: "lots" } } }], entry);
   const r = res.get(3).result;
   expect(r.isError).toBe(true);
   expect(r.content[0].text).toContain("Input validation error");
 }, 20_000);
+}

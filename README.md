@@ -83,17 +83,28 @@ Also on [YouTube](https://www.youtube.com/watch?v=U0FGD6SXQt8).
 
 ## Quick start (bun + Claude Code CLI)
 
-Requires [bun](https://bun.sh) and the `claude` CLI. Bun runs the TypeScript directly, no build step.
+Requires [bun](https://bun.sh) and the `claude` CLI. `bun run build` bundles the server into one file, `dist/search-console-mcp.js`, that needs no `node_modules` at runtime and starts in about 60 ms.
 
 ```bash
 git clone <this repository> search-console-mcp
-cd search-console-mcp && bun install
-bun src/index.ts setup
+cd search-console-mcp && bun install && bun run build
+bun dist/search-console-mcp.js setup
 ```
 
 The wizard signs you in with Google, verifies the connection, lets you pick a property, and runs `claude mcp add` pointing at this checkout. Read only by default; choose full access for the sitemap and URL submission tools. You need your own Google OAuth client JSON (Google Cloud > enable **Search Console API** > Credentials > OAuth client ID > **Desktop app**).
 
 Flags: `--client code|print`, `--scopes readonly|full`, `--site <property>`, `--secrets <path>`, `--reauth`, `--force`, `--dry-run`, `--help`.
+
+### Development
+
+| Command | What it does |
+|---|---|
+| `bun run start` | Run the server from source (no build) |
+| `bun run build` | Bundle to `dist/search-console-mcp.js` |
+| `bun run typecheck` | `tsc` (TypeScript 7) type check |
+| `bun run lint` | Biome lint |
+| `bun test` | Offline unit tests plus MCP tests against both source and the built bundle |
+| `bun run check` | typecheck, lint and test |
 
 ### Manual registration
 
@@ -103,7 +114,7 @@ OAuth:
 claude mcp add --scope user gsc \
   -e GSC_AUTH_MODE=oauth -e GSC_OAUTH_SECRETS_FILE=/path/to/client_secrets.json \
   -e GSC_SITE_URL=sc-domain:yoursite.com -e GSC_SCOPES=readonly \
-  -- bun --no-env-file /path/to/search-console-mcp/src/index.ts
+  -- bun --no-env-file /path/to/search-console-mcp/dist/search-console-mcp.js
 ```
 
 First use opens a browser for Google sign in; the token is cached owner-only at `~/.gsc-mcp/`.
@@ -113,7 +124,7 @@ Service account (add its email to your GSC property under Settings > Users and p
 ```bash
 claude mcp add --scope user gsc \
   -e GSC_KEY_FILE=/path/to/service-account.json -e GSC_SITE_URL=sc-domain:yoursite.com \
-  -- bun --no-env-file /path/to/search-console-mcp/src/index.ts
+  -- bun --no-env-file /path/to/search-console-mcp/dist/search-console-mcp.js
 ```
 
 ### Generative AI (v2.4)
@@ -220,7 +231,7 @@ Step-by-step setup with screenshots, use cases, and examples:
 
 ## Changelog
 
-**Unreleased (audit-fixes)** Claude Code CLI + bun only: runs `src/index.ts` directly with bun (no `dist/`, no tsc, no npm), setup registers via `claude mcp add`. Removed `generate_report`, the image-search tools, `image_page_audit`, Claude Desktop setup and the `.mcpb` bundle. Merged PRs #16 (`site_url` on every tool), #17 (dependency advisories, #12), #18, #19 (`inspect_url` URL-prefix fallback), #20 (branded / multimodal / filter lists). Fixed #15 (Indexing calls no longer replace the Search Console auth). OAuth callback now checks `state`; token file is owner-only (0600).
+**Unreleased (audit-fixes)** Claude Code CLI + bun only. Bun handles build (`bun build` bundles to a single `dist/search-console-mcp.js`), test (`bun test`), plus lint (Biome) and type checks (TypeScript 7), all run through bun. `googleapis` (209 MB) replaced by Google's per-API `@googleapis/searchconsole` and `@googleapis/indexing`, and `open` replaced by a few lines that call the OS browser opener: `node_modules` went from ~270 MB to ~55 MB and startup from 0.38 s / 165 MB to 0.06 s / 60 MB. Identical Search Analytics queries already in flight now share one download (`content_recommendations` used to fetch the same report twice). The URL-prefix property fallback now only triggers on a 403, not on quota or network errors. Date windows are computed in UTC, so they no longer shift a day across DST changes. Setup registers via `claude mcp add` with `bun --no-env-file`, so a project's `.env` can't override GSC settings. Removed `generate_report`, the image-search tools, `image_page_audit`, Claude Desktop setup and the `.mcpb` bundle. Merged PRs #16 (`site_url` on every tool), #17 (#12), #18, #19 (`inspect_url` URL-prefix fallback), #20 (branded / multimodal / filter lists). Fixed #15 (Indexing calls no longer replace the Search Console auth). The OAuth callback now checks `state`, and the token file is owner-only (0600).
 
 **Unreleased** Support for the [Search Analytics API additions of 16 November 2026](https://developers.google.com/search/blog/2026/11/search-analytics-api-update). `branded_vs_non_branded` uses the new `brandedClassification` dimension to split performance into branded and non-branded traffic with Google's own classification, rather than a regex you maintain. `multimodal_search_overview` reads `type=webMultimodal` (Google Lens, Circle to Search on Android, image uploads in Search). `advanced_search_analytics` gains `filter_lists` for multi-country and multi-device filtering in one call (the API's `filterLists`), accepts `brandedClassification` and `searchAppearance` as dimensions and filters, and accepts `search_type: webMultimodal`. Limits that come from Google, verified against the live API: branded data starts on 2026-02-21 and exists only for top-level properties with enough volume (ineligible properties return no rows, reported as `eligible: false`); `brandedClassification` cannot be combined with a query filter; multimodal search cannot be grouped or filtered by query or by `brandedClassification`; filter lists accept only `country` and `device`, and a dimension cannot appear in both a filter and a filter list.
 

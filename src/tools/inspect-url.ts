@@ -1,4 +1,4 @@
-import { inspectUrl, InspectionResult } from "../inspection.js";
+import { inspectUrl } from "../inspection.js";
 
 interface InspectionSummary {
   url: string;

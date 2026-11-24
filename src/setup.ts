@@ -10,24 +10,24 @@
  * API call goes straight from this machine to Google. Nothing touches any
  * third party server.
  */
-import { fileURLToPath } from "url";
-import { google } from "googleapis";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
+import { searchconsole } from "@googleapis/searchconsole";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import * as readline from "node:readline/promises";
-import { spawnSync } from "child_process";
+import { spawnSync } from "node:child_process";
 import {
 
   authenticateWithOAuth,
   clearCachedToken,
   tokenPath,
-  ScopeTier,
+  type ScopeTier,
 } from "./oauth.js";
 import { embeddedClientAvailable } from "./embedded-client.js";
 
-// Register this checkout directly: bun runs the TypeScript, no build step.
-const SERVER_ENTRY = fileURLToPath(new URL("./index.ts", import.meta.url));
+// Register whatever entry is running setup (src/index.ts, or the dist/ bundle), so the
+// Claude Code entry points at this exact copy.
+const SERVER_ENTRY = path.resolve(process.argv[1]);
 
 interface SetupOptions {
   client: "code" | "print" | null;
@@ -242,7 +242,7 @@ export async function runSetup(argv: string[]): Promise<number> {
       console.log("  1. console.cloud.google.com > create a project > enable the Search Console API");
       console.log("  2. Credentials > Create credentials > OAuth client ID > Desktop app");
       console.log("  3. Download the JSON file");
-      console.log("Full walkthrough: see "Quick start" in README.md\n");
+      console.log('Full walkthrough: see "Quick start" in README.md\n');
       const p = await prompter.ask("Path to your client secrets JSON file: ", "");
       if (!p) {
         console.error("No credentials provided. Re-run setup when you have the JSON file.");
@@ -280,7 +280,7 @@ export async function runSetup(argv: string[]): Promise<number> {
       console.log("\nOpening your browser for Google sign in...");
       const auth = await authenticateWithOAuth();
 
-      const sc = google.searchconsole({ version: "v1", auth });
+      const sc = searchconsole({ version: "v1", auth });
       const res = await sc.sites.list({});
       const sites = (res.data.siteEntry || []).filter((s) => s.siteUrl);
       console.log(`\nConnected. Your Google account has ${sites.length} Search Console propert${sites.length === 1 ? "y" : "ies"}.`);
@@ -297,7 +297,9 @@ export async function runSetup(argv: string[]): Promise<number> {
           siteUrl = sites[0].siteUrl!;
           console.log(`Default property: ${siteUrl}`);
         } else {
-          sites.forEach((s, i) => console.log(`  [${i + 1}] ${s.siteUrl}  (${s.permissionLevel})`));
+          sites.forEach((s, i) => {
+            console.log(`  [${i + 1}] ${s.siteUrl}  (${s.permissionLevel})`);
+          });
           const pick = await prompter.ask(`Default property [1-${sites.length}]: `, "1");
           const idx = Math.min(Math.max(parseInt(pick, 10) || 1, 1), sites.length) - 1;
           siteUrl = sites[idx].siteUrl!;

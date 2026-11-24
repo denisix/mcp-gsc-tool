@@ -1,4 +1,4 @@
-import { searchconsole_v1 } from "googleapis";
+import type { searchconsole_v1 } from "@googleapis/searchconsole";
 import { getSearchConsoleClient, getConfig } from "./auth.js";
 import { propertyCandidates, fallbackNote, permissionHint, isPermissionError } from "./property-candidates.js";
 

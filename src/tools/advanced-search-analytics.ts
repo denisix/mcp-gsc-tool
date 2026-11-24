@@ -2,9 +2,9 @@ import {
   fetchAllRows,
   getDateRange,
   buildFilterGroups,
-  DimensionFilterList,
-  SearchAnalyticsRow,
-  SearchType,
+  type DimensionFilterList,
+  type SearchAnalyticsRow,
+  type SearchType,
 } from "../analytics.js";
 
 interface Filter {

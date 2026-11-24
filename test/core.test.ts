@@ -17,16 +17,16 @@ const state = {
   pages: [] as any[][], // rows returned per searchanalytics page
   inspectErrors: {} as Record<string, any>, // property -> error to throw
   indexingAuth: [] as any[],
-  globalOptions: 0,
+  searchconsoleAuth: [] as any[],
 };
 
 class FakeAuth { constructor(public opts: any) {} }
-mock.module("googleapis", () => ({
-  google: {
-    auth: { GoogleAuth: FakeAuth, OAuth2: FakeAuth },
-    options: () => { state.globalOptions++; },
-    searchconsole: (cfg: any) => ({
-      auth: cfg.auth,
+const fakeAuth = { GoogleAuth: FakeAuth, OAuth2: FakeAuth };
+mock.module("@googleapis/searchconsole", () => ({
+  auth: fakeAuth,
+  searchconsole: (cfg: any) => {
+    state.searchconsoleAuth.push(cfg.auth);
+    return {
       searchanalytics: {
         query: async ({ siteUrl, requestBody }: any) => {
           state.queries.push({ siteUrl, startRow: requestBody.startRow, body: requestBody });
@@ -43,11 +43,14 @@ mock.module("googleapis", () => ({
           },
         },
       },
-    }),
-    indexing: (cfg: any) => {
-      state.indexingAuth.push(cfg.auth);
-      return { urlNotifications: { publish: async () => ({ data: { urlNotificationMetadata: {} } }) } };
-    },
+    };
+  },
+}));
+mock.module("@googleapis/indexing", () => ({
+  auth: fakeAuth,
+  indexing: (cfg: any) => {
+    state.indexingAuth.push(cfg.auth);
+    return { urlNotifications: { publish: async () => ({ data: { urlNotificationMetadata: {} } }) } };
   },
 }));
 
@@ -59,7 +62,7 @@ const { inspectUrl } = await import("../src/inspection.ts");
 const { submitUrl } = await import("../src/tools/submit-url.ts");
 
 beforeEach(() => {
-  Object.assign(state, { queries: [], inspects: [], pages: [], inspectErrors: {}, indexingAuth: [], globalOptions: 0 });
+  Object.assign(state, { queries: [], inspects: [], pages: [], inspectErrors: {}, indexingAuth: [] });
 });
 
 const row = (k: string) => ({ keys: [k], clicks: 1, impressions: 10, ctr: 0.1, position: 3 });
@@ -156,10 +159,39 @@ test("fetchAllRows paginates with dataState=all and stops on a short page", asyn
 });
 
 // --- #15 ---
-test("#15: submit_url never sets global googleapis auth", async () => {
+test("#15: submit_url gets its own auth client", async () => {
   await fetchAllRows({ startDate: "a", endDate: "b", dimensions: [] });
   const r = await submitUrl("https://default.com/p");
   expect(r.success).toBe(true);
-  expect(state.globalOptions).toBe(0);
+  // Each client gets its own auth; the cached Search Console client keeps the full scope set.
+  expect(state.indexingAuth[0]).not.toBe(state.searchconsoleAuth[0]);
   expect(state.indexingAuth[0].opts.scopes).toEqual(["https://www.googleapis.com/auth/indexing"]);
+});
+
+// --- in-flight dedup ---
+const P = { startDate: "a", endDate: "b", dimensions: ["query"] };
+
+test("identical parallel queries share one download, and each caller gets its own copy", async () => {
+  state.pages = [[row("b"), row("a")]];
+  const [x, y] = await Promise.all([fetchAllRows(P), fetchAllRows(P)]);
+  expect(state.queries).toHaveLength(1); // one download, not two
+  x.sort((p, q) => p.keys[0].localeCompare(q.keys[0]));
+  x[0].keys[0] = "mutated";
+  expect(y.map((r) => r.keys[0])).toEqual(["b", "a"]); // y untouched by x's in-place sort/mutation
+});
+
+test("dedup never crosses properties or outlives the request", async () => {
+  await Promise.all([fetchAllRows(P), withSiteUrl("sc-domain:other.com", () => fetchAllRows(P))]);
+  expect(new Set(state.queries.map((q) => q.siteUrl))).toEqual(new Set(["sc-domain:default.com", "sc-domain:other.com"]));
+  const before = state.queries.length;
+  await fetchAllRows(P); // sequential: fresh data, not a cache hit
+  expect(state.queries.length).toBe(before + 1);
+});
+
+test("a failed download is not cached", async () => {
+  const q = { ...P, dimensions: ["page"] };
+  state.pages = { shift: () => { throw new Error("boom"); } } as any; // the API call fails
+  await expect(fetchAllRows(q)).rejects.toThrow("boom");
+  state.pages = [];
+  expect(await fetchAllRows(q)).toEqual([]);
 });

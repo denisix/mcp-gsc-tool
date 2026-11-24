@@ -4,9 +4,9 @@ import {
   getPriorDateRange,
   buildFilterGroups,
   BRANDED_DATA_START,
-  DimensionFilterList,
-  SearchAnalyticsRow,
-  SearchType,
+  type DimensionFilterList,
+  type SearchAnalyticsRow,
+  type SearchType,
 } from "../analytics.js";
 
 type BrandedSearchType = Exclude<SearchType, "webMultimodal">;

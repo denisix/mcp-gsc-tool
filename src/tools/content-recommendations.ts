@@ -38,7 +38,6 @@ export async function contentRecommendations(
   // Category A: Update existing pages (group quick wins by their ranking page)
   // Need query+page data to know which page ranks for each query
   // Quick wins only return queries, so we group by opportunity
-  const pageQuickWins = new Map<string, { keywords: string[]; totalOpportunity: number }>();
 
   // Since quick wins don't include page data, we create update recommendations per keyword
   // with high opportunity
@@ -77,7 +76,6 @@ export async function contentRecommendations(
     const bestPage = pages[0]; // already sorted by position
     const otherPages = pages.slice(1);
     // Opportunity: combine all impressions under one page
-    const totalClicks = pages.reduce((sum, p) => sum + p.clicks, 0);
     const estimatedGain = Math.round(issue.totalImpressions * 0.05); // conservative 5% CTR uplift
 
     recs.push({

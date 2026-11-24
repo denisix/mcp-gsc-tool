@@ -10,3 +10,4 @@ demo-mock/
 probe-platform-properties.mjs
 .env*
 dist/
+!biome.json
