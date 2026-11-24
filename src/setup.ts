@@ -2,7 +2,7 @@
  * `npx suganthan-gsc-mcp setup`
  *
  * Guided setup: authenticates with Google, verifies API access with a live
- * sites.list call, then writes the MCP entry into Claude Desktop and/or
+ * sites.list call, then writes the MCP entry into Claude Code (via `claude mcp add`) or
  * Claude Code config for the user. The goal is that nobody ever edits a
  * config file or reads an OAuth tutorial to get started.
  *
@@ -25,7 +25,7 @@ import {
 import { embeddedClientAvailable } from "./embedded-client.js";
 
 interface SetupOptions {
-  client: "desktop" | "code" | "both" | "print" | null;
+  client: "code" | "print" | null;
   scopes: ScopeTier | null;
   site: string | null;
   secrets: string | null;
@@ -40,10 +40,10 @@ const USAGE = `
 Usage: npx suganthan-gsc-mcp setup [options]
 
 Guided setup for the GSC MCP server. Signs you in with Google, checks the
-connection works, and writes the config for Claude Desktop or Claude Code.
+connection works, and writes the config for Claude Code.
 
 Options:
-  --client <target>   Where to install: desktop, code, both, or print
+  --client <target>   Where to install: code (Claude Code CLI, default) or print
                       (print shows the JSON without writing anything)
   --scopes <tier>     readonly (recommended) or full
                       (full adds sitemap submission and the Indexing API)
@@ -77,8 +77,8 @@ function parseArgs(argv: string[]): SetupOptions {
     switch (a) {
       case "--client": {
         const v = argv[++i];
-        if (v === "desktop" || v === "code" || v === "both" || v === "print") opts.client = v;
-        else throw new Error(`Invalid --client value: ${v}. Use desktop, code, both, or print.`);
+        if (v === "code" || v === "print") opts.client = v;
+        else throw new Error(`Invalid --client value: ${v}. Use code or print.`);
         break;
       }
       case "--scopes": {
@@ -115,17 +115,6 @@ function parseArgs(argv: string[]): SetupOptions {
     }
   }
   return opts;
-}
-
-function desktopConfigPath(): string {
-  if (process.platform === "darwin") {
-    return path.join(os.homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json");
-  }
-  if (process.platform === "win32") {
-    const appData = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
-    return path.join(appData, "Claude", "claude_desktop_config.json");
-  }
-  return path.join(os.homedir(), ".config", "Claude", "claude_desktop_config.json");
 }
 
 interface Prompter {
@@ -172,61 +161,6 @@ function serverEntry(env: Record<string, string>) {
     args: ["-y", "suganthan-gsc-mcp"],
     env,
   };
-}
-
-async function writeDesktopConfig(
-  env: Record<string, string>,
-  prompter: Prompter,
-  force: boolean,
-  dryRun: boolean
-): Promise<boolean> {
-  const configPath = desktopConfigPath();
-  const entry = serverEntry(env);
-
-  if (dryRun) {
-    console.log(`\n[dry run] Would write to: ${configPath}`);
-    console.log(JSON.stringify({ mcpServers: { gsc: entry } }, null, 2));
-    return true;
-  }
-
-  let config: any = {};
-  if (fs.existsSync(configPath)) {
-    const raw = fs.readFileSync(configPath, "utf8");
-    try {
-      config = raw.trim().length > 0 ? JSON.parse(raw) : {};
-    } catch {
-      console.error(`\nCould not parse ${configPath}.`);
-      console.error("The file contains invalid JSON. Fix it first, then re-run setup. Nothing was changed.");
-      return false;
-    }
-  } else {
-    const dir = path.dirname(configPath);
-    if (!fs.existsSync(dir)) {
-      console.error(`\nClaude Desktop config folder not found at ${dir}.`);
-      console.error("Is Claude Desktop installed? Creating the folder anyway.");
-      fs.mkdirSync(dir, { recursive: true });
-    }
-  }
-
-  config.mcpServers = config.mcpServers || {};
-  if (config.mcpServers.gsc && !force) {
-    const overwrite = await prompter.ask("A gsc entry already exists in Claude Desktop. Overwrite it? [y/N] ", "n");
-    if (overwrite.toLowerCase() !== "y") {
-      console.log("Left the existing Claude Desktop entry alone.");
-      return false;
-    }
-  }
-
-  if (fs.existsSync(configPath)) {
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    fs.copyFileSync(configPath, `${configPath}.backup-${stamp}`);
-  }
-
-  config.mcpServers.gsc = entry;
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
-  console.log(`\nClaude Desktop configured: ${configPath}`);
-  console.log("Restart Claude Desktop to pick it up.");
-  return true;
 }
 
 function writeCodeConfig(env: Record<string, string>, force: boolean, dryRun: boolean): boolean {
@@ -370,14 +304,7 @@ export async function runSetup(argv: string[]): Promise<number> {
     }
 
     // 4. Choose where to install
-    let client = opts.client;
-    if (!client) {
-      const answer = await prompter.ask(
-        "\nInstall where? [1] Claude Desktop  [2] Claude Code  [3] Both  [4] Just print the config. Choose [1-4]: ",
-        "1"
-      );
-      client = answer.trim() === "2" ? "code" : answer.trim() === "3" ? "both" : answer.trim() === "4" ? "print" : "desktop";
-    }
+    const client = opts.client ?? "code";
 
     const env = buildEnv({ scopes, site: siteUrl!, secretsPath });
 
@@ -386,12 +313,7 @@ export async function runSetup(argv: string[]): Promise<number> {
       console.log("\nAdd this to your MCP client config:");
       console.log(JSON.stringify({ mcpServers: { gsc: serverEntry(env) } }, null, 2));
     } else {
-      if (client === "desktop" || client === "both") {
-        ok = (await writeDesktopConfig(env, prompter, opts.force, opts.dryRun)) && ok;
-      }
-      if (client === "code" || client === "both") {
-        ok = writeCodeConfig(env, opts.force, opts.dryRun) && ok;
-      }
+      ok = writeCodeConfig(env, opts.force, opts.dryRun);
     }
 
     if (!opts.dryRun && ok) {

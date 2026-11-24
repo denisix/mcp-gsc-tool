@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import { GUARDRAIL_SUFFIX, VISUAL_SUFFIX, POSITION_CAVEAT, withMeta } from "./guardrails.js";
+import { GUARDRAIL_SUFFIX, POSITION_CAVEAT, withMeta } from "./guardrails.js";
 import { withSiteUrl } from "./auth.js";
 import { quickWins } from "./tools/quick-wins.js";
 import { ctrOpportunities } from "./tools/ctr-opportunities.js";
@@ -20,25 +20,16 @@ import { verifyClaim } from "./tools/verify-claim.js";
 import { advancedSearchAnalytics } from "./tools/advanced-search-analytics.js";
 import { checkAlerts } from "./tools/check-alerts.js";
 import { contentRecommendations } from "./tools/content-recommendations.js";
-import { generateReport } from "./tools/generate-report.js";
 import { multiSiteDashboard } from "./tools/multi-site-dashboard.js";
 import { submitUrl, submitBatch } from "./tools/submit-url.js";
 import { submitSitemap, listSitemaps } from "./tools/submit-sitemap.js";
 // v2.3 image SEO tools — paired with the Image SEO post on suganthan.com.
-import { imageKeywordOverview } from "./tools/image-keyword-overview.js";
-import { imageSearchQuickWins } from "./tools/image-search-quick-wins.js";
-import { compareWebVsImage } from "./tools/compare-web-vs-image.js";
-import { imagePagesOverview } from "./tools/image-pages-overview.js";
-import { imageKeywordTrends } from "./tools/image-keyword-trends.js";
-import { imageImpressionsNoClicks } from "./tools/image-impressions-no-clicks.js";
-import { imageContentDecay } from "./tools/image-content-decay.js";
 // v2.4 generative AI tools — the Generative AI report has no API, but AI Mode
 // conversation exhaust leaks into the regular query dimension. See the tool
 // file for the mechanism and sources.
 import { genaiConversationQueries } from "./tools/genai-conversation-queries.js";
 // v2.5: the bridge from "which pages fail in image search" to "why". Fetches
 // the user's own pages and audits the on-page image factors.
-import { imagePageAudit } from "./tools/image-page-audit.js";
 // Search Analytics API additions of November 2026: branded classification,
 // multimodal search (type=webMultimodal) and multi-value filter lists.
 import { brandedVsNonBranded } from "./tools/branded-vs-non-branded.js";
@@ -72,7 +63,7 @@ const SITE_URL_PARAM = z
     "GSC property for this call, e.g. sc-domain:example.com or https://www.example.com/. " +
     "Omit to use the default property (GSC_SITE_URL). Your credentials must have access to it."
   );
-const NO_PROPERTY_TOOLS = new Set(["multi_site_dashboard", "submit_url", "submit_batch", "image_page_audit"]);
+const NO_PROPERTY_TOOLS = new Set(["multi_site_dashboard", "submit_url", "submit_batch"]);
 
 const registerTool = server.tool.bind(server);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -87,7 +78,7 @@ const registerTool = server.tool.bind(server);
 // 1. Quick Wins
 server.tool(
   "quick_wins",
-  "Find keywords you're almost ranking for that could be pushed to page one. Returns queries at positions 4-15 with high impressions, sorted by traffic opportunity." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Find keywords you're almost ranking for that could be pushed to page one. Returns queries at positions 4-15 with high impressions, sorted by traffic opportunity." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     min_impressions: z.number().default(100).describe("Minimum impressions threshold"),
@@ -105,7 +96,7 @@ server.tool(
 // 2. CTR Opportunities
 server.tool(
   "ctr_opportunities",
-  "Find pages with high impressions but CTR significantly below expected for their position. These are title/meta description optimisation candidates." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Find pages with high impressions but CTR significantly below expected for their position. These are title/meta description optimisation candidates." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     min_impressions: z.number().default(500).describe("Minimum impressions threshold"),
@@ -122,7 +113,7 @@ server.tool(
 // 3. Traffic Drops
 server.tool(
   "traffic_drops",
-  "Find pages that lost the most traffic recently. Compares current period vs prior period and diagnoses whether each drop is a ranking loss, CTR collapse, or demand decline." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Find pages that lost the most traffic recently. Compares current period vs prior period and diagnoses whether each drop is a ranking loss, CTR collapse, or demand decline." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     days: z.number().default(28).describe("Number of days per period to compare"),
   },
@@ -138,7 +129,7 @@ server.tool(
 // 4. Content Gaps
 server.tool(
   "content_gaps",
-  "Find topics you should create content for. Returns queries where you get impressions but rank beyond position 20, meaning there is search demand but no real content targeting it." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Find topics you should create content for. Returns queries where you get impressions but rank beyond position 20, meaning there is search demand but no real content targeting it." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     days: z.number().default(90).describe("Number of days to analyse"),
     min_impressions: z.number().default(50).describe("Minimum impressions threshold"),
@@ -156,7 +147,7 @@ server.tool(
 // 5. Site Snapshot
 server.tool(
   "site_snapshot",
-  "Get a quick overview of how the site is performing. Returns total clicks, impressions, CTR, and position with a comparison to the prior period." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Get a quick overview of how the site is performing. Returns total clicks, impressions, CTR, and position with a comparison to the prior period." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     days: z.number().default(28).describe("Number of days per period"),
   },
@@ -172,7 +163,7 @@ server.tool(
 // 6. Inspect URL
 server.tool(
   "inspect_url",
-  "Check if a URL is indexed and why or why not. Returns indexing status, last crawl date, canonical info, robots/noindex issues, and mobile usability in one answer." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX,
+  "Check if a URL is indexed and why or why not. Returns indexing status, last crawl date, canonical info, robots/noindex issues, and mobile usability in one answer." + GUARDRAIL_SUFFIX,
   {
     url: z.string().describe("The full URL to inspect"),
   },
@@ -188,7 +179,7 @@ server.tool(
 // 7. Cannibalization Check
 server.tool(
   "cannibalization_check",
-  "Find keywords where multiple pages from your site compete against each other. Shows which page ranks higher, the position gap, and combined impressions being split." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Find keywords where multiple pages from your site compete against each other. Shows which page ranks higher, the position gap, and combined impressions being split." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     min_impressions: z.number().default(50).describe("Minimum combined impressions for a query"),
@@ -205,7 +196,7 @@ server.tool(
 // 8. Content Decay
 server.tool(
   "content_decay",
-  "Find pages that are slowly dying with consistent traffic decline over three consecutive 30-day periods. One bad month is noise; three consecutive bad months is a problem." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Find pages that are slowly dying with consistent traffic decline over three consecutive 30-day periods. One bad month is noise; three consecutive bad months is a problem." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {},
   async () => {
     const results = await contentDecay();
@@ -219,7 +210,7 @@ server.tool(
 // 9. Topic Cluster Performance
 server.tool(
   "topic_cluster_performance",
-  "See how a group of pages performs as a whole. Aggregates clicks, impressions, CTR, and position for all pages matching a URL path pattern, plus top 5 pages and queries." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "See how a group of pages performs as a whole. Aggregates clicks, impressions, CTR, and position for all pages matching a URL path pattern, plus top 5 pages and queries." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     path_pattern: z.string().describe("URL path pattern to match (e.g. /blog/seo)"),
     days: z.number().default(28).describe("Number of days to analyse"),
@@ -236,7 +227,7 @@ server.tool(
 // 10. CTR vs Benchmark
 server.tool(
   "ctr_vs_benchmark",
-  "Compare your actual CTR per page against industry benchmarks by position. Flags pages significantly underperforming for their ranking position." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Compare your actual CTR per page against industry benchmarks by position. Flags pages significantly underperforming for their ranking position." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     min_impressions: z.number().default(200).describe("Minimum impressions threshold"),
@@ -273,7 +264,7 @@ server.tool(
 // 12. Advanced Search Analytics
 server.tool(
   "advanced_search_analytics",
-  "Run a custom search analytics query with flexible dimensions and filters. Supports country, device, query, page, searchAppearance and brandedClassification, multi-country / multi-device filter lists, and search type (web/image/video/news/discover/googleNews/webMultimodal). Google rejects some combinations: brandedClassification cannot be combined with a query filter, and webMultimodal cannot be grouped or filtered by query or brandedClassification. For power users who need specific data cuts." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Run a custom search analytics query with flexible dimensions and filters. Supports country, device, query, page, searchAppearance and brandedClassification, multi-country / multi-device filter lists, and search type (web/image/video/news/discover/googleNews/webMultimodal). Google rejects some combinations: brandedClassification cannot be combined with a query filter, and webMultimodal cannot be grouped or filtered by query or brandedClassification. For power users who need specific data cuts." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     dimensions: z.array(z.string()).default(["query"]).describe("Dimensions to group by: query, page, country, device, date, searchAppearance, brandedClassification (BRANDED / NON_BRANDED, data from 2026-02-21, eligible top-level properties only)"),
@@ -300,7 +291,7 @@ server.tool(
 // 13. Check Alerts
 server.tool(
   "check_alerts",
-  "Check for SEO alerts: position drops, CTR collapses, click losses, and pages that disappeared from search results. Returns severity-rated alerts so you know what needs attention first." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Check for SEO alerts: position drops, CTR collapses, click losses, and pages that disappeared from search results. Returns severity-rated alerts so you know what needs attention first." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     days: z.number().default(7).describe("Number of days per period to compare"),
     position_drop_threshold: z.number().default(20).describe("Alert if position drops more than this many spots"),
@@ -319,7 +310,7 @@ server.tool(
 // 14. Content Recommendations
 server.tool(
   "content_recommendations",
-  "Get actionable content recommendations by cross-referencing quick wins, content gaps, and cannibalisation data. Returns prioritised actions: pages to update, content to create, and pages to consolidate." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX,
+  "Get actionable content recommendations by cross-referencing quick wins, content gaps, and cannibalisation data. Returns prioritised actions: pages to update, content to create, and pages to consolidate." + GUARDRAIL_SUFFIX,
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     max_recommendations: z.number().default(10).describe("Maximum number of recommendations"),
@@ -334,26 +325,11 @@ server.tool(
 );
 
 // 15. Generate Report
-server.tool(
-  "generate_report",
-  "Generate a comprehensive markdown performance report. Covers site snapshot, alerts, quick wins, traffic drops, content decay, and recommendations. Saves to disk for weekly reviews or scheduled reporting." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX,
-  {
-    output_path: z.string().optional().describe("File name for the report, no folders (default: gsc-report-{date}.md). Saved in GSC_REPORT_DIR or the server's working directory; an existing file is never overwritten."),
-    days: z.number().default(28).describe("Number of days to analyse"),
-    include_sections: z.array(z.string()).optional().describe("Sections: snapshot, alerts, quick_wins, traffic_drops, content_decay, recommendations"),
-  },
-  async ({ output_path, days, include_sections }) => {
-    const results = await generateReport(output_path, days, include_sections);
-    return {
-      content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
-    };
-  }
-);
 
 // 16. Multi-Site Dashboard
 server.tool(
   "multi_site_dashboard",
-  "Health check across multiple GSC properties in one view. Shows clicks, impressions, CTR, and position for each site with period comparison and health status. Agency essential." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Health check across multiple GSC properties in one view. Shows clicks, impressions, CTR, and position for each site with period comparison and health status. Agency essential." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     site_urls: z.array(z.string()).optional().describe("Array of GSC property URLs. Falls back to GSC_SITE_URLS env var."),
     days: z.number().default(28).describe("Number of days per period"),
@@ -438,137 +414,23 @@ server.tool(
 // ---------------------------------------------------------------------------
 
 // 21. Image Keyword Overview
-server.tool(
-  "image_keyword_overview",
-  "Top image-search keywords for the site, sorted by impressions, clicks, or position. Filtered to type=image so it returns only what surfaces in Google Images, not web search." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
-  {
-    days: z.number().default(90).describe("Number of days to analyse (image search is lower volume, default 90)"),
-    min_impressions: z.number().default(50).describe("Minimum impressions threshold"),
-    row_limit: z.number().default(50).describe("Maximum rows to return"),
-    order_by: z.enum(["impressions", "clicks", "position"]).default("impressions").describe("Sort field"),
-  },
-  async ({ days, min_impressions, row_limit, order_by }) => {
-    const results = await imageKeywordOverview(days, min_impressions, row_limit, order_by);
-    const wrapped = withMeta(results, "image_keyword_overview", { days, min_impressions, row_limit, order_by });
-    return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
-    };
-  }
-);
 
 // 22. Image Search Quick Wins
-server.tool(
-  "image_search_quick_wins",
-  "Find image-search queries ranking at positions 4-15 with high impressions, sorted by estimated traffic gain if they reach position 3. Uses an image-search CTR baseline calibrated to the lower CTRs typical of Google Images." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
-  {
-    days: z.number().default(90).describe("Number of days to analyse"),
-    min_impressions: z.number().default(500).describe("Minimum impressions threshold"),
-    max_position: z.number().default(15).describe("Maximum position to include"),
-  },
-  async ({ days, min_impressions, max_position }) => {
-    const results = await imageSearchQuickWins(days, min_impressions, max_position);
-    const wrapped = withMeta(results, "image_search_quick_wins", { days, min_impressions, max_position });
-    return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
-    };
-  }
-);
 
 // 23. Compare Web vs Image
-server.tool(
-  "compare_web_vs_image",
-  "For each query, returns side-by-side performance across web and image search. Two GSC API calls joined on query, with an impressions ratio that surfaces where image search carries disproportionate volume relative to web." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
-  {
-    days: z.number().default(90).describe("Number of days to analyse"),
-    min_combined_impressions: z.number().default(100).describe("Minimum combined (web + image) impressions to include the query"),
-    row_limit: z.number().default(50).describe("Maximum rows to return"),
-  },
-  async ({ days, min_combined_impressions, row_limit }) => {
-    const results = await compareWebVsImage(days, min_combined_impressions, row_limit);
-    const wrapped = withMeta(results, "compare_web_vs_image", { days, min_combined_impressions, row_limit });
-    return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
-    };
-  }
-);
 
 // 24. Image Pages Overview
-server.tool(
-  "image_pages_overview",
-  "Pages on the site ranked by image-search performance. Tells you which pages are actually surfacing in Google Images and which are not. Pairs with image_keyword_overview to map ranking queries back to the pages carrying them." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
-  {
-    days: z.number().default(90).describe("Number of days to analyse"),
-    min_impressions: z.number().default(100).describe("Minimum impressions threshold"),
-    row_limit: z.number().default(50).describe("Maximum rows to return"),
-    order_by: z.enum(["impressions", "clicks", "position"]).default("clicks").describe("Sort field"),
-  },
-  async ({ days, min_impressions, row_limit, order_by }) => {
-    const results = await imagePagesOverview(days, min_impressions, row_limit, order_by);
-    const wrapped = withMeta(results, "image_pages_overview", { days, min_impressions, row_limit, order_by });
-    return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
-    };
-  }
-);
 
 // 25. Image Keyword Trends
-server.tool(
-  "image_keyword_trends",
-  "Period-over-period trend for image-search queries. Two equal-length windows joined on query, with impressions and position deltas. Negative position delta means the query improved its average rank." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
-  {
-    days: z.number().default(28).describe("Length in days of each comparison window (current + prior)"),
-    min_combined_impressions: z.number().default(100).describe("Minimum combined impressions across both windows"),
-    row_limit: z.number().default(50).describe("Maximum rows to return"),
-    order_by: z.enum(["impressions_delta", "position_delta"]).default("impressions_delta").describe("Sort field"),
-  },
-  async ({ days, min_combined_impressions, row_limit, order_by }) => {
-    const results = await imageKeywordTrends(days, min_combined_impressions, row_limit, order_by);
-    const wrapped = withMeta(results, "image_keyword_trends", { days, min_combined_impressions, row_limit, order_by });
-    return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
-    };
-  }
-);
 
 // 26. Image Impressions No Clicks
-server.tool(
-  "image_impressions_no_clicks",
-  "Surfaces query and page pairs that earn meaningful image-search impressions but effectively zero clicks. The textbook 'thumbnail is not converting' pattern. Defaults tuned for image search, which runs at much higher impression volumes per page than web." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
-  {
-    days: z.number().default(90).describe("Number of days to analyse"),
-    min_impressions: z.number().default(500).describe("Minimum impressions threshold"),
-    max_clicks: z.number().default(2).describe("Maximum clicks (filter to pages stuck in the impressions-no-clicks pattern)"),
-    row_limit: z.number().default(50).describe("Maximum rows to return"),
-  },
-  async ({ days, min_impressions, max_clicks, row_limit }) => {
-    const results = await imageImpressionsNoClicks(days, min_impressions, max_clicks, row_limit);
-    const wrapped = withMeta(results, "image_impressions_no_clicks", { days, min_impressions, max_clicks, row_limit });
-    return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
-    };
-  }
-);
 
 // 27. Image Content Decay
-server.tool(
-  "image_content_decay",
-  "Image-search version of content_decay. Three 30-day windows, flags pages with a consistent decline across all three. Defaults to a lower minimum click threshold than the web equivalent because image search produces lower click volumes overall." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
-  {
-    min_period3_clicks: z.number().default(5).describe("Minimum image-search clicks in the oldest 30-day window required for a page to be considered"),
-  },
-  async ({ min_period3_clicks }) => {
-    const results = await imageContentDecay(min_period3_clicks);
-    const wrapped = withMeta(results, "image_content_decay", { min_period3_clicks });
-    return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
-    };
-  }
-);
 
 // 28. Generative AI Conversation Queries
 server.tool(
   "genai_conversation_queries",
-  "Surface AI-conversation exhaust hiding in your regular query data: bare replies to Google's AI ('yes', 'go on'), 'what about X' pivot follow-ups, conversational questions, AI-visibility tracker probes, and full agent prompts logged as queries. Google counts every AI Mode follow-up as a new query and folds AI Mode/AI Overviews into the web search type, so these fragments carry real impressions, positions and clicks. The dedicated Generative AI report has no query dimension; this is the only query-level AI evidence available anywhere. Classifies every match into seven buckets with landing pages, plus a monthly timeline showing when reply-artefacts first appeared on your site. Treat probe and harness buckets as machine traffic, not demand." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Surface AI-conversation exhaust hiding in your regular query data: bare replies to Google's AI ('yes', 'go on'), 'what about X' pivot follow-ups, conversational questions, AI-visibility tracker probes, and full agent prompts logged as queries. Google counts every AI Mode follow-up as a new query and folds AI Mode/AI Overviews into the web search type, so these fragments carry real impressions, positions and clicks. The dedicated Generative AI report has no query dimension; this is the only query-level AI evidence available anywhere. Classifies every match into seven buckets with landing pages, plus a monthly timeline showing when reply-artefacts first appeared on your site. Treat probe and harness buckets as machine traffic, not demand." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     days: z.number().default(480).describe("Days to analyse (default 480, the full 16 months GSC retains)"),
     min_impressions: z.number().default(1).describe("Minimum impressions for a query to be listed (single-impression rows are evidence, not noise, so the default keeps them)"),
@@ -585,34 +447,11 @@ server.tool(
 );
 
 // 29. Image Page Audit
-server.tool(
-  "image_page_audit",
-  "Fetches pages from YOUR OWN site and audits every image on them for the on-page factors that drive image-search performance: missing/empty/generic/duplicate alt text, non-descriptive filenames, missing width/height attributes, lazy loading on the LCP candidate, srcset coverage, file format and weight, intrinsic dimensions vs Google's ~250x200 indexing minimum, ImageObject and licensable schema, max-image-preview, inline background images, and the metadata inside the image files (camera EXIF and GPS that should be stripped, IPTC Creator/Copyright/Caption that should survive, XMP DigitalSourceType on AI-generated images). Feed it URLs straight from image_impressions_no_clicks or image_search_quick_wins to turn 'which pages fail' into 'why they fail'. Only fetches the URLs given; no third-party service involved. Returns a per-image findings table, page-level checks, and an ordered top_fixes list." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX,
-  {
-    urls: z.array(z.string()).min(1).max(5).describe("Page URLs to audit (1-5, from your own site)"),
-    fetch_metadata: z.boolean().default(true).describe("Also read EXIF/IPTC/XMP metadata from the image files"),
-    max_images_per_page: z.number().default(12).describe("Maximum images fetched and weighed per page (HTML checks still cover all images)"),
-    max_images_reported: z.number().default(20).describe("Maximum per-image rows returned per page"),
-  },
-  async ({ urls, fetch_metadata, max_images_per_page, max_images_reported }) => {
-    const results = await imagePageAudit(urls, fetch_metadata, max_images_per_page, max_images_reported);
-    const wrapped = withMeta(
-      results,
-      "image_page_audit",
-      { urls, fetch_metadata, max_images_per_page, max_images_reported },
-      "Live fetch of the audited pages (the user's own site)",
-      "All findings come from fetching and parsing the listed pages and image files at call time. Alt text, attributes, bytes, and dimensions are read values, not estimates. Base your analysis only on this data. An empty alt (alt=\"\") is correct for decorative images; do not report it as a defect."
-    );
-    return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
-    };
-  }
-);
 
 // 30. Branded vs Non-Branded
 server.tool(
   "branded_vs_non_branded",
-  "Split search performance into branded and non-branded traffic using Google's own query classification. Returns clicks, impressions, CTR, position and share for each side, change against the previous period, a daily trend, and the top queries and pages on each side. Only top-level properties with enough query volume are classified, and only from 2026-02-21; when eligible is false the data is unavailable, not zero." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Split search performance into branded and non-branded traffic using Google's own query classification. Returns clicks, impressions, CTR, position and share for each side, change against the previous period, a daily trend, and the top queries and pages on each side. Only top-level properties with enough query volume are classified, and only from 2026-02-21; when eligible is false the data is unavailable, not zero." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     row_limit: z.number().default(25).describe("Maximum top queries and pages to return per side"),
@@ -632,7 +471,7 @@ server.tool(
 // 31. Multimodal Search Overview
 server.tool(
   "multimodal_search_overview",
-  "Performance in multimodal search: Google Lens, Circle to Search on Android, and image uploads in Google Search. Returns totals with change against the previous period, the size of multimodal relative to web search, top pages, countries, devices and a daily trend. Google provides no queries for this surface, so there is no keyword breakdown." + GUARDRAIL_SUFFIX + VISUAL_SUFFIX + POSITION_CAVEAT,
+  "Performance in multimodal search: Google Lens, Circle to Search on Android, and image uploads in Google Search. Returns totals with change against the previous period, the size of multimodal relative to web search, top pages, countries, devices and a daily trend. Google provides no queries for this surface, so there is no keyword breakdown." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
   {
     days: z.number().default(90).describe("Number of days to analyse (multimodal is low volume, default 90)"),
     row_limit: z.number().default(25).describe("Maximum pages and countries to return"),
