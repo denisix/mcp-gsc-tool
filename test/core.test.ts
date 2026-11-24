@@ -7,7 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gsc-test-"));
-process.env.HOME = tmp; // token cache lives here, never in the real ~/.gsc-mcp
+process.env.GSC_TOKEN_DIR = path.join(tmp, "tokens"); // never the real home (bun ignores runtime HOME changes)
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const keyFile = path.join(tmp, "key.json");
 fs.writeFileSync(keyFile, JSON.stringify({
@@ -283,4 +283,20 @@ test("OAuth: expired cached token is refreshed, refresh_token kept, cache stays 
   } finally {
     delete process.env.GSC_SCOPES;
   }
+});
+
+test("tokens from the pre-rename ~/.gsc-mcp are still picked up; new ones go to ~/.search-console-mcp", async () => {
+    // Legacy lookup needs the default location, so run in a child with a fake HOME set at process start.
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "scm-home-"));
+  fs.mkdirSync(path.join(home, ".gsc-mcp"));
+  fs.writeFileSync(path.join(home, ".gsc-mcp", "oauth-token.json"), JSON.stringify({ access_token: "legacy" }));
+  const mod = new URL("../src/oauth.ts", import.meta.url).href;
+  const script = `const m = await import(${JSON.stringify(mod)});
+    const a = m.loadCachedToken().access_token; m.saveCachedToken({ access_token: "new" });
+    console.log(JSON.stringify([a, m.loadCachedToken().access_token, m.tokenPath()]));`;
+  const env: Record<string, string | undefined> = { ...process.env, HOME: home };
+  delete env.GSC_TOKEN_DIR;
+  const out = Bun.spawnSync(["bun", "-e", script], { env }).stdout.toString();
+  expect(JSON.parse(out)).toEqual(["legacy", "new", path.join(home, ".search-console-mcp", "oauth-token.json")]);
+  fs.rmSync(home, { recursive: true });
 });

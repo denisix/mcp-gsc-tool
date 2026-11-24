@@ -26,7 +26,7 @@ cd search-console-mcp && bun install && bun run build
    bun dist/search-console-mcp.js setup --secrets ~/Downloads/client_secret_XXXX.json
    ```
 
-The token is cached owner-only in `~/.gsc-mcp/`. Re-run with `--reauth` to sign in again or change scopes.
+The token is cached owner-only in `~/.search-console-mcp/`. Re-run with `--reauth` to sign in again or change scopes.
 Note: while the consent screen is in *Testing* mode, Google expires refresh tokens after 7 days. Click **Publish app** on the consent screen to avoid weekly sign-ins (no verification is needed for your own use).
 
 ### B. Service account: servers, CI, many sites
@@ -37,7 +37,7 @@ Note: while the consent screen is in *Testing* mode, Google expires refresh toke
 4. Register it:
 
    ```bash
-   claude mcp add --scope user gsc \
+   claude mcp add --scope user search-console \
      -e GSC_KEY_FILE=/path/to/key.json -e GSC_SITE_URL=sc-domain:example.com \
      -- bun --no-env-file /path/to/search-console-mcp/dist/search-console-mcp.js
    ```
@@ -56,6 +56,7 @@ Then start `claude` and ask something like *"What are my quick wins?"* or *"Whic
 | `GSC_OAUTH_SECRETS_FILE` | OAuth client JSON (or `GSC_OAUTH_CLIENT_ID` + `GSC_OAUTH_CLIENT_SECRET`) |
 | `GSC_SCOPES` | `readonly` or `full` (default). Read only can't submit sitemaps or URLs |
 | `GSC_SITE_URLS` | Comma-separated properties for `multi_site_dashboard` |
+| `GSC_TOKEN_DIR` | Where the OAuth token is cached (default `~/.search-console-mcp`; an older `~/.gsc-mcp` token is still read) |
 
 Every tool that queries a property also accepts `site_url` per call, so one server covers all properties your credentials can see.
 

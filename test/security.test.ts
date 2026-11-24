@@ -29,12 +29,12 @@ test("no process-global googleapis auth (#15)", () => {
 });
 
 test("token file is written owner-only", () => {
-  // Child process so HOME is fixed before the module computes its token path: never touch the real ~/.gsc-mcp.
+  // Fresh process and an explicit token dir: never touch the real ~/.search-console-mcp.
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "gsc-home-"));
   const mod = new URL("../src/oauth.ts", import.meta.url).href;
   execFileSync(process.execPath, ["-e", `(await import(${JSON.stringify(mod)})).saveCachedToken({a:1})`],
-    { env: { ...process.env, HOME: home, USERPROFILE: home } });
-  const st = fs.statSync(path.join(home, ".gsc-mcp", "oauth-token.json"));
+    { env: { ...process.env, GSC_TOKEN_DIR: path.join(home, "tokens") } });
+  const st = fs.statSync(path.join(home, "tokens", "oauth-token.json"));
   assert.equal(st.mode & 0o777, 0o600);
   fs.rmSync(home, { recursive: true });
 });

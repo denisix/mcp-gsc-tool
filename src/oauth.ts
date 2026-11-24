@@ -7,8 +7,12 @@ import { createHash, randomBytes } from "node:crypto";
 import { cachedTokenSource, type TokenSource, tokenRequest } from "./google.js";
 import { EMBEDDED_CLIENT_ID, EMBEDDED_CLIENT_SECRET, embeddedClientAvailable } from "./embedded-client.js";
 
-const TOKEN_DIR = path.join(os.homedir(), ".gsc-mcp");
-const TOKEN_PATH = path.join(TOKEN_DIR, "oauth-token.json");
+// Resolved per call: GSC_TOKEN_DIR overrides the default ~/.search-console-mcp (tests rely on this,
+// since bun's os.homedir() ignores HOME changes made at runtime).
+const tokenDir = () => process.env.GSC_TOKEN_DIR || path.join(os.homedir(), ".search-console-mcp");
+const tokenFile = () => path.join(tokenDir(), "oauth-token.json");
+// Pre-rename location, read so existing sign-ins keep working; new tokens are saved to tokenFile().
+const legacyTokenFile = () => (process.env.GSC_TOKEN_DIR ? null : path.join(os.homedir(), ".gsc-mcp", "oauth-token.json"));
 
 export type ScopeTier = "readonly" | "full";
 
@@ -39,30 +43,29 @@ export function scopesForTier(tier: ScopeTier): string[] {
 
 export function clearCachedToken(): void {
   try {
-    if (fs.existsSync(TOKEN_PATH)) fs.unlinkSync(TOKEN_PATH);
+    if (fs.existsSync(tokenFile())) fs.unlinkSync(tokenFile());
   } catch {
     // best effort
   }
 }
 
 export function tokenPath(): string {
-  return TOKEN_PATH;
+  return tokenFile();
 }
 
 // Concurrency guard: if an OAuth flow is already in progress, reuse its promise
 let activeAuthPromise: Promise<any> | null = null;
 
 function ensureTokenDir(): void {
-  if (!fs.existsSync(TOKEN_DIR)) {
-    fs.mkdirSync(TOKEN_DIR, { recursive: true, mode: 0o700 });
+  if (!fs.existsSync(tokenDir())) {
+    fs.mkdirSync(tokenDir(), { recursive: true, mode: 0o700 });
   }
 }
 
 export function loadCachedToken(): any | null {
   try {
-    if (fs.existsSync(TOKEN_PATH)) {
-      const raw = fs.readFileSync(TOKEN_PATH, "utf8");
-      return JSON.parse(raw);
+    for (const p of [tokenFile(), legacyTokenFile()]) {
+      if (p && fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
     }
   } catch {
     // corrupted token file, will re-auth
@@ -72,8 +75,8 @@ export function loadCachedToken(): any | null {
 
 export function saveCachedToken(token: any): void {
   ensureTokenDir();
-  fs.writeFileSync(TOKEN_PATH, JSON.stringify(token, null, 2), { encoding: "utf8", mode: 0o600 });
-  fs.chmodSync(TOKEN_PATH, 0o600); // mode only applies on create; tighten tokens written by older versions too
+  fs.writeFileSync(tokenFile(), JSON.stringify(token, null, 2), { encoding: "utf8", mode: 0o600 });
+  fs.chmodSync(tokenFile(), 0o600); // mode only applies on create; tighten tokens written by older versions too
 }
 
 interface OAuthConfig {
