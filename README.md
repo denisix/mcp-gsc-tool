@@ -6,10 +6,14 @@ Google Search Console MCP server for **Claude Code CLI**, run with **bun**. 35 t
 
 ## Install
 
-Needs [bun](https://bun.sh) and the `claude` CLI.
+Needs [bun](https://bun.sh) (the runtime and package manager this project uses instead of Node/npm) and the `claude` CLI. Install bun:
 
 ```bash
-bun add -g @denisix/mcp-gsc-tool    # then use `mcp-gsc-tool setup ...` in place of `bun dist/mcp-gsc-tool.js setup ...` below
+curl -fsSL https://bun.sh/install | bash    # macOS / Linux; Windows: powershell -c "irm bun.sh/install.ps1 | iex"
+```
+
+```bash
+bun add -g @denisixnpm/mcp-gsc-tool    # then use `mcp-gsc-tool setup ...` in place of `bun dist/mcp-gsc-tool.js setup ...` below
 ```
 
 Install globally rather than running `bunx ... setup`: setup registers the path it runs from, and bunx's cache path can disappear.
@@ -128,7 +132,7 @@ Read-only API calls retry on 429/5xx with backoff; submissions are never resent.
 | `bun run start` | Run from source |
 | `bun run build` | Bundle to `dist/mcp-gsc-tool.js` (about 200 KB, no `node_modules` needed) |
 | `bun run check` | Type check (TypeScript 7), lint (Biome) and `bun test` |
-| `npm version patch && git push --follow-tags` | Release: CI checks and publishes `@denisix/mcp-gsc-tool` to npm (needs the `NPM_TOKEN` repo secret) |
+| `bun pm version patch && git push --follow-tags` | Release: CI checks and publishes `@denisixnpm/mcp-gsc-tool` to the npm registry via Trusted Publishing (no token) |
 | `bun run install:claude` | Build and copy the bundle to `~/.claude/mcp-gsc-tool/`; run `setup` from there once so Claude Code points at it, then re-run this after changes |
 
 ## Changelog (this fork)

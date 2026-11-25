@@ -1,5 +1,5 @@
 {
-  "name": "@denisix/mcp-gsc-tool",
+  "name": "@denisixnpm/mcp-gsc-tool",
   "version": "2.5.1",
   "description": "Google Search Console MCP server for Claude Code CLI, run with bun. Fork of Suganthan Mohanadasan's GSC MCP.",
   "main": "dist/mcp-gsc-tool.js",
@@ -50,7 +50,6 @@
     "bun": ">=1.1"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   }
 }

@@ -1,25 +1,24 @@
 name: Publish
-# Push a tag vX.Y.Z (npm version patch && git push --follow-tags) to publish @denisix/mcp-gsc-tool.
+# Push a tag vX.Y.Z (bun pm version patch && git push --follow-tags) to publish @denisixnpm/mcp-gsc-tool.
+# Auth is npm Trusted Publishing (OIDC): no token; configure it on npmjs.com under the package's
+# Settings > Trusted Publisher (GitHub Actions, denisix/mcp-gsc-tool, publish.yml).
 on:
   push:
     tags: ["v*"]
 permissions:
   contents: read
-  id-token: write # npm provenance (and trusted publishing, once configured on npmjs.com)
+  id-token: write # OIDC token npm exchanges for a short-lived publish credential; also signs provenance
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
       - run: bun install --frozen-lockfile
       - name: Tag must match package.json version
-        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
-      # prepublishOnly runs check + build
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: test "v$(bun -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+      - run: bun run check && bun run build
+      # Only this step uses npm: bun publish has no OIDC / provenance support yet. npm >= 11.5.1 is
+      # required for trusted publishing; it runs on the runner's preinstalled Node.
+      # shortcut: switch to `bun publish` once it supports trusted publishing.
+      - run: npx --yes npm@^11.5.1 publish --access public --ignore-scripts
