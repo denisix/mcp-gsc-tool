@@ -7,9 +7,9 @@ import { createHash, randomBytes } from "node:crypto";
 import { cachedTokenSource, type TokenSource, tokenRequest } from "./google.js";
 import { EMBEDDED_CLIENT_ID, EMBEDDED_CLIENT_SECRET, embeddedClientAvailable } from "./embedded-client.js";
 
-// Resolved per call: GSC_TOKEN_DIR overrides the default ~/.search-console-mcp (tests rely on this,
+// Resolved per call: GSC_TOKEN_DIR overrides the default ~/.mcp-gsc-tool (tests rely on this,
 // since bun's os.homedir() ignores HOME changes made at runtime).
-const tokenDir = () => process.env.GSC_TOKEN_DIR || path.join(os.homedir(), ".search-console-mcp");
+const tokenDir = () => process.env.GSC_TOKEN_DIR || path.join(os.homedir(), ".mcp-gsc-tool");
 const tokenFile = () => path.join(tokenDir(), "oauth-token.json");
 // Pre-rename location, read so existing sign-ins keep working; new tokens are saved to tokenFile().
 const legacyTokenFile = () => (process.env.GSC_TOKEN_DIR ? null : path.join(os.homedir(), ".gsc-mcp", "oauth-token.json"));

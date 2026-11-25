@@ -1,5 +1,5 @@
 /**
- * Hallucination guardrails for search-console-mcp.
+ * Hallucination guardrails for mcp-gsc-tool.
  *
  * These ensure Claude sticks to the data returned by the GSC API
  * and does not speculate about causes, invent numbers, or fill gaps

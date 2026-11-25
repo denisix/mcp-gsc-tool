@@ -6,7 +6,7 @@
  * Claude Code config for the user. The goal is that nobody ever edits a
  * config file or reads an OAuth tutorial to get started.
  *
- * Privacy model: tokens are cached at ~/.search-console-mcp/ on this machine and every
+ * Privacy model: tokens are cached at ~/.mcp-gsc-tool/ on this machine and every
  * API call goes straight from this machine to Google. Nothing touches any
  * third party server.
  */
@@ -44,7 +44,7 @@ interface SetupOptions {
 const USAGE = `
 Usage: bun src/index.ts setup [options]
 
-Guided setup for search-console-mcp. Signs you in with Google, checks the
+Guided setup for mcp-gsc-tool. Signs you in with Google, checks the
 connection works, and writes the config for Claude Code.
 
 Options:
@@ -55,13 +55,13 @@ Options:
   --site <property>   Default GSC property, e.g. sc-domain:yoursite.com
   --secrets <path>    Path to your own OAuth client secrets JSON file
   --reauth            Discard the cached token and sign in again
-  --force             Overwrite an existing search-console entry without asking
+  --force             Overwrite an existing mcp-gsc-tool entry without asking
   --dry-run           Show what would be written without signing in or writing
   --yes               Accept defaults for any prompt not covered by a flag
   --help              Show this help
 
 Your Search Console data goes straight from this machine to Google.
-Tokens are stored locally in ~/.search-console-mcp/ and never leave this machine.
+Tokens are stored locally in ~/.mcp-gsc-tool/ and never leave this machine.
 `.trim();
 
 function parseArgs(argv: string[]): SetupOptions {
@@ -173,7 +173,7 @@ function writeCodeConfig(env: Record<string, string>, force: boolean, dryRun: bo
   for (const [k, v] of Object.entries(env)) {
     envFlags.push("-e", `${k}=${v}`);
   }
-  const addArgs = ["mcp", "add", "--scope", "user", ...envFlags, "search-console", "--", "bun", "--no-env-file", SERVER_ENTRY];
+  const addArgs = ["mcp", "add", "--scope", "user", ...envFlags, "mcp-gsc-tool", "--", "bun", "--no-env-file", SERVER_ENTRY];
   const manualCommand = `claude ${addArgs.map((a) => (a.includes(" ") ? JSON.stringify(a) : a)).join(" ")}`;
 
   if (dryRun) {
@@ -183,7 +183,7 @@ function writeCodeConfig(env: Record<string, string>, force: boolean, dryRun: bo
   }
 
   if (force) {
-    spawnSync("claude", ["mcp", "remove", "--scope", "user", "search-console"], { stdio: "ignore" });
+    spawnSync("claude", ["mcp", "remove", "--scope", "user", "mcp-gsc-tool"], { stdio: "ignore" });
   }
 
   const result = spawnSync("claude", addArgs, { stdio: "inherit" });
@@ -194,7 +194,7 @@ function writeCodeConfig(env: Record<string, string>, force: boolean, dryRun: bo
   }
   if (result.status !== 0) {
     console.error("\nclaude mcp add did not succeed. If an entry already exists, remove it first:");
-    console.error("  claude mcp remove --scope user search-console");
+    console.error("  claude mcp remove --scope user mcp-gsc-tool");
     console.error("then re-run setup, or run manually:");
     console.error(`  ${manualCommand}`);
     return false;
@@ -217,7 +217,7 @@ export async function runSetup(argv: string[]): Promise<number> {
     return 0;
   }
 
-  console.log("search-console-mcp setup");
+  console.log("mcp-gsc-tool setup");
   console.log("Free, open source, and private. Your data goes straight from this machine to Google.\n");
 
   const prompter = makePrompter(opts.yes);
@@ -318,7 +318,7 @@ export async function runSetup(argv: string[]): Promise<number> {
     let ok = true;
     if (client === "print") {
       console.log("\nAdd this to your MCP client config:");
-      console.log(JSON.stringify({ mcpServers: { "search-console": serverEntry(env) } }, null, 2));
+      console.log(JSON.stringify({ mcpServers: { "mcp-gsc-tool": serverEntry(env) } }, null, 2));
     } else {
       ok = writeCodeConfig(env, opts.force, opts.dryRun);
     }

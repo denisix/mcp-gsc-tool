@@ -8,7 +8,7 @@
  * non-confidential, because a binary on the user's machine can never keep a
  * secret. The client identifies the APP to Google's consent screen. It grants
  * no access by itself: every user still signs in with their own Google account
- * and their tokens are stored only on their own machine (~/.search-console-mcp/).
+ * and their tokens are stored only on their own machine (~/.mcp-gsc-tool/).
  *
  * Users who prefer their own client can set GSC_OAUTH_CLIENT_ID and
  * GSC_OAUTH_CLIENT_SECRET, or GSC_OAUTH_SECRETS_FILE, which always take

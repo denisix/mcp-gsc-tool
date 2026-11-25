@@ -285,7 +285,7 @@ test("OAuth: expired cached token is refreshed, refresh_token kept, cache stays 
   }
 });
 
-test("tokens from the pre-rename ~/.gsc-mcp are still picked up; new ones go to ~/.search-console-mcp", async () => {
+test("tokens from the pre-rename ~/.gsc-mcp are still picked up; new ones go to ~/.mcp-gsc-tool", async () => {
     // Legacy lookup needs the default location, so run in a child with a fake HOME set at process start.
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "scm-home-"));
   fs.mkdirSync(path.join(home, ".gsc-mcp"));
@@ -297,6 +297,6 @@ test("tokens from the pre-rename ~/.gsc-mcp are still picked up; new ones go to 
   const env: Record<string, string | undefined> = { ...process.env, HOME: home };
   delete env.GSC_TOKEN_DIR;
   const out = Bun.spawnSync(["bun", "-e", script], { env }).stdout.toString();
-  expect(JSON.parse(out)).toEqual(["legacy", "new", path.join(home, ".search-console-mcp", "oauth-token.json")]);
+  expect(JSON.parse(out)).toEqual(["legacy", "new", path.join(home, ".mcp-gsc-tool", "oauth-token.json")]);
   fs.rmSync(home, { recursive: true });
 });

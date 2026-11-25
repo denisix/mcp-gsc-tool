@@ -63,7 +63,7 @@ test(`${kind}: the official MCP SDK client can connect, list and call tools`, as
   const client = new Client({ name: "sdk-interop", version: "1" });
   await client.connect(transport);
   try {
-    expect(client.getServerVersion()).toEqual({ name: "search-console-mcp", version: "2.5.1" });
+    expect(client.getServerVersion()).toEqual({ name: "mcp-gsc-tool", version: "2.5.1" });
     const { tools } = await client.listTools(); // the SDK validates the response against its own schemas
     expect(tools).toHaveLength(22);
     await client.ping();

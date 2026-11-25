@@ -1,14 +1,14 @@
 {
-  "name": "search-console-mcp",
+  "name": "mcp-gsc-tool",
   "version": "2.5.1",
   "description": "Google Search Console MCP server for Claude Code CLI, run with bun. Fork of Suganthan Mohanadasan's GSC MCP.",
   "main": "src/index.ts",
   "bin": {
-    "search-console-mcp": "dist/search-console-mcp.js"
+    "mcp-gsc-tool": "dist/mcp-gsc-tool.js"
   },
   "scripts": {
     "start": "bun --no-env-file src/index.ts",
-    "build": "bun build ./src/index.ts --target=bun --minify --sourcemap=linked --outdir ./dist --entry-naming search-console-mcp.js",
+    "build": "bun build ./src/index.ts --target=bun --minify --sourcemap=linked --outdir ./dist --entry-naming mcp-gsc-tool.js",
     "typecheck": "tsc -p .",
     "lint": "biome lint src test",
     "test": "bun test",
@@ -21,7 +21,7 @@
     "claude",
     "gsc"
   ],
-  "author": "Suganthan Mohanadasan (original author); search-console-mcp contributors",
+  "author": "Suganthan Mohanadasan (original author); mcp-gsc-tool contributors",
   "license": "Apache-2.0",
   "dependencies": {
     "zod": "^4.6.6"

@@ -29,7 +29,7 @@ test("no process-global googleapis auth (#15)", () => {
 });
 
 test("token file is written owner-only", () => {
-  // Fresh process and an explicit token dir: never touch the real ~/.search-console-mcp.
+  // Fresh process and an explicit token dir: never touch the real ~/.mcp-gsc-tool.
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "gsc-home-"));
   const mod = new URL("../src/oauth.ts", import.meta.url).href;
   execFileSync(process.execPath, ["-e", `(await import(${JSON.stringify(mod)})).saveCachedToken({a:1})`],

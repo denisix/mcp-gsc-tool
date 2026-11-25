@@ -46,7 +46,7 @@ const filterListsSchema = z
 
 
 const server = new McpServer({
-  name: "search-console-mcp",
+  name: "mcp-gsc-tool",
   version: "2.5.1",
 });
 
@@ -492,7 +492,7 @@ async function main() {
     process.exit(0);
   }
 
-  console.error("search-console-mcp v2.5.1 running on stdio");
+  console.error("mcp-gsc-tool v2.5.1 running on stdio");
   await server.serveStdio();
 }
 
