@@ -1,4 +1,5 @@
 import { getSearchConsoleClient, getConfig } from "./auth.js";
+import { GoogleApiError } from "./google.js";
 import { propertyCandidates, fallbackNote, permissionHint, isPermissionError } from "./property-candidates.js";
 // Subset of the URL Inspection API response this module reads (https://developers.google.com/webmaster-tools/v1/urlInspection.index/inspect).
 type InspectUrlIndexResponse = { inspectionResult?: any };
@@ -47,7 +48,8 @@ export async function inspectUrl(url: string): Promise<InspectionResult> {
   }
 
   if (!response) {
-    throw new Error((firstError?.message || String(firstError)) + permissionHint(candidates));
+    // Keep the HTTP status so callers can tell quota (429) from permission errors.
+    throw new GoogleApiError((firstError?.message || String(firstError)) + permissionHint(candidates), firstError?.status ?? 0);
   }
 
   const note = fallbackNote(usedSiteUrl, configSiteUrl);

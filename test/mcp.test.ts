@@ -15,7 +15,7 @@ const req = (method: string, params?: object, id: number | string = 1) => server
 test("initialize negotiates the protocol version like the SDK", async () => {
   for (const v of SUPPORTED_PROTOCOL_VERSIONS) expect(((await req("initialize", { protocolVersion: v })) as any).result.protocolVersion).toBe(v);
   const r: any = await req("initialize", { protocolVersion: "1999-01-01" });
-  expect(r.result).toEqual({ protocolVersion: SUPPORTED_PROTOCOL_VERSIONS[0], capabilities: { tools: { listChanged: false } }, serverInfo: { name: "t", version: "1" } });
+  expect(r.result).toEqual({ protocolVersion: SUPPORTED_PROTOCOL_VERSIONS[0], capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } }, serverInfo: { name: "t", version: "1" } });
 });
 
 test("notifications never get a reply, even unknown or failing ones", async () => {
@@ -49,4 +49,50 @@ test("tools/call validates, applies defaults, and reports failures as isError re
 
 test("duplicate tool names are rejected at registration", () => {
   expect(() => server.tool("echo", "again", {}, () => ({ content: [] }))).toThrow("already registered");
+});
+
+test("prompts/list and prompts/get render templates and check required arguments", async () => {
+  server.prompt("p", "A prompt", [{ name: "who", description: "x", required: true }], (a) => `hi ${a.who}`);
+  const list: any = await req("prompts/list");
+  expect(list.result.prompts).toEqual([{ name: "p", description: "A prompt", arguments: [{ name: "who", description: "x", required: true }] }]);
+  const got: any = await req("prompts/get", { name: "p", arguments: { who: "bob" } });
+  expect(got.result.messages).toEqual([{ role: "user", content: { type: "text", text: "hi bob" } }]);
+  expect(((await req("prompts/get", { name: "p" })) as any).error.code).toBe(-32602);
+  expect(((await req("prompts/get", { name: "nope" })) as any).error.code).toBe(-32602);
+});
+
+test("a reused request id cannot cancel or untrack the first call", async () => {
+  const { requestSignal } = await import("../src/mcp.ts");
+  const signals: AbortSignal[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  server.tool("hold", "Holds", {}, async () => {
+    signals.push(requestSignal()!);
+    await gate;
+    return { content: [{ type: "text", text: "done" }] };
+  });
+  const first = req("tools/call", { name: "hold", arguments: {} }, 5);
+  const second = req("tools/call", { name: "hold", arguments: {} }, 5);
+  await Bun.sleep(5);
+  await server.handle({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 5 } });
+  release();
+  expect(((await first) as any)).toBeNull(); // the tracked (first) call was cancelled
+  expect(((await second) as any).result.content[0].text).toBe("done");
+  expect(signals[1].aborted).toBe(false);
+});
+
+test("notifications/cancelled aborts the signal of the matching tools/call", async () => {
+  const { requestSignal } = await import("../src/mcp.ts");
+  let seen: AbortSignal | undefined;
+  server.tool("wait", "Waits until cancelled", {}, () =>
+    new Promise((resolve) => {
+      seen = requestSignal();
+      seen!.addEventListener("abort", () => resolve({ content: [{ type: "text", text: "aborted" }] }));
+    })
+  );
+  const call = req("tools/call", { name: "wait", arguments: {} }, 77);
+  await Bun.sleep(5);
+  await server.handle({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 77 } });
+  expect(await call).toBeNull(); // a cancelled request gets no response
+  expect(seen?.aborted).toBe(true);
 });

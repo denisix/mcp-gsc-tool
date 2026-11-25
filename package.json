@@ -12,7 +12,8 @@
     "typecheck": "tsc -p .",
     "lint": "biome lint src test",
     "test": "bun test",
-    "check": "bun run typecheck && bun run lint && bun test"
+    "check": "bun run typecheck && bun run lint && bun test",
+    "install:claude": "bun run build && D=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/mcp-gsc-tool && mkdir -p -m 700 $D && cp dist/mcp-gsc-tool.js $D/ && echo Installed $D/mcp-gsc-tool.js"
   },
   "keywords": [
     "mcp",

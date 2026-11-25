@@ -7,12 +7,12 @@ import { createHash, randomBytes } from "node:crypto";
 import { cachedTokenSource, type TokenSource, tokenRequest } from "./google.js";
 import { EMBEDDED_CLIENT_ID, EMBEDDED_CLIENT_SECRET, embeddedClientAvailable } from "./embedded-client.js";
 
-// Resolved per call: GSC_TOKEN_DIR overrides the default ~/.mcp-gsc-tool (tests rely on this,
-// since bun's os.homedir() ignores HOME changes made at runtime).
-const tokenDir = () => process.env.GSC_TOKEN_DIR || path.join(os.homedir(), ".mcp-gsc-tool");
+// Resolved per call: GSC_TOKEN_DIR overrides the default ~/.claude/mcp-gsc-tool (tests rely on this,
+// since bun's os.homedir() ignores HOME changes made at runtime). CLAUDE_CONFIG_DIR moves ~/.claude, as in Claude Code.
+const tokenDir = () => process.env.GSC_TOKEN_DIR || path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "mcp-gsc-tool");
 const tokenFile = () => path.join(tokenDir(), "oauth-token.json");
-// Pre-rename location, read so existing sign-ins keep working; new tokens are saved to tokenFile().
-const legacyTokenFile = () => (process.env.GSC_TOKEN_DIR ? null : path.join(os.homedir(), ".gsc-mcp", "oauth-token.json"));
+// Older locations, read so existing sign-ins keep working; new tokens are saved to tokenFile().
+const legacyTokenFiles = () => (process.env.GSC_TOKEN_DIR ? [] : [".mcp-gsc-tool", ".gsc-mcp"].map((d) => path.join(os.homedir(), d, "oauth-token.json")));
 
 export type ScopeTier = "readonly" | "full";
 
@@ -64,8 +64,8 @@ function ensureTokenDir(): void {
 
 export function loadCachedToken(): any | null {
   try {
-    for (const p of [tokenFile(), legacyTokenFile()]) {
-      if (p && fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
+    for (const p of [tokenFile(), ...legacyTokenFiles()]) {
+      if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
     }
   } catch {
     // corrupted token file, will re-auth
@@ -116,6 +116,12 @@ export function getOAuthConfig(): OAuthConfig {
     "or set GSC_OAUTH_CLIENT_ID and GSC_OAUTH_CLIENT_SECRET, " +
     "or set GSC_OAUTH_SECRETS_FILE to a Google OAuth client secrets JSON file."
   );
+}
+
+/** True when the cached OAuth token was granted this scope (e.g. "openid" for PageSpeed Insights). */
+export function cachedTokenHasScope(scope: string): boolean {
+  const granted = loadCachedToken()?.scope;
+  return typeof granted === "string" && granted.split(" ").includes(scope);
 }
 
 /**
@@ -271,7 +277,9 @@ async function runBrowserAuth(config: OAuthConfig): Promise<any> {
         client_id: config.clientId,
         redirect_uri: REDIRECT_URI,
         response_type: "code",
-        scope: scopesForTier(getScopeTier()).join(" "),
+        // openid lets PageSpeed Insights bill this client's project instead of the shared keyless quota.
+        // Requested but not required (cachedTokenCoversScopes), so older tokens keep working without a new sign-in.
+        scope: [...scopesForTier(getScopeTier()), "openid"].join(" "),
         access_type: "offline",
         prompt: "consent",
         state,

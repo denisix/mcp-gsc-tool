@@ -24,6 +24,9 @@ export function withSiteUrl<T>(siteUrl: string | undefined, fn: () => T): T {
   return trimmed ? siteUrlContext.run(trimmed, fn) : fn();
 }
 
+/** The site_url passed to this call, if any (not the env default). */
+export const siteUrlOverride = () => siteUrlContext.getStore();
+
 /** The property this call runs against, without throwing (for _meta). */
 export function currentSiteUrl(): string | undefined {
   return (

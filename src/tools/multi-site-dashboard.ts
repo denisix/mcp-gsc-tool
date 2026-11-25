@@ -1,4 +1,4 @@
-import { fetchAllRows, getDateRange, getPriorDateRange } from "../analytics.js";
+import { fetchAllRows, getDateRange, getPriorDateRange, mapLimit } from "../analytics.js";
 import { getConfig, withSiteUrl } from "../auth.js";
 
 interface SiteHealth {
@@ -97,8 +97,8 @@ export async function multiSiteDashboard(
     );
   }
 
-  // Run all site snapshots in parallel
-  const sites = await Promise.all(urls.map((url) => siteSnapshotForUrl(url, days)));
+  // At most 3 sites in flight: Search Analytics QPS limits are per project, and every site costs 2 queries.
+  const sites = await mapLimit(urls, 3, (url) => siteSnapshotForUrl(url, days));
 
   const healthyCount = sites.filter((s) => s.health === "healthy").length;
   const warningCount = sites.filter((s) => s.health === "warning").length;

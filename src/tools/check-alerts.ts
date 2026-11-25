@@ -1,4 +1,4 @@
-import { fetchAllRows, getDateRange, getPriorDateRange } from "../analytics.js";
+import { COMPARE_LAG_DAYS, fetchAllRows, getDateRange, getPriorDateRange } from "../analytics.js";
 
 interface Alert {
   severity: "critical" | "warning" | "info";
@@ -32,8 +32,8 @@ export async function checkAlerts(
   ctrDropThreshold: number = 50,
   clickDropThreshold: number = 30
 ): Promise<AlertResult> {
-  const current = getDateRange(days);
-  const prior = getPriorDateRange(days);
+  const current = getDateRange(days, new Date(), COMPARE_LAG_DAYS);
+  const prior = getPriorDateRange(days, new Date(), COMPARE_LAG_DAYS);
 
   // Fetch query+page level data for both periods
   const [currentRows, priorRows] = await Promise.all([

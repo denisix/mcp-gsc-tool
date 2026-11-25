@@ -112,3 +112,41 @@ export async function listSitemaps(): Promise<SitemapListResult> {
 
   throw new Error((firstError?.message || String(firstError)) + permissionHint(candidates));
 }
+
+/** Runs `fn` against the configured property, falling back to its URL-prefix variants on 403. */
+async function onProperty<T>(fn: (property: string) => Promise<T>): Promise<T & { siteUrl: string; note?: string }> {
+  const { siteUrl: configSiteUrl } = getConfig();
+  const candidates = sitemapPropertyCandidates(configSiteUrl);
+  let firstError: any = null;
+  for (const property of candidates) {
+    try {
+      const result = await fn(property);
+      const note = fallbackNote(property, configSiteUrl);
+      return { ...result, siteUrl: property, ...(note && { note }) };
+    } catch (err: any) {
+      if (!firstError) firstError = err;
+      if (!isPermissionError(err)) break;
+    }
+  }
+  throw new Error((firstError?.message || String(firstError)) + permissionHint(candidates));
+}
+
+export async function getSitemap(sitemapUrl?: string) {
+  const client = await getSearchConsoleClient();
+  return onProperty(async (property) => {
+    const feedpath = sitemapUrl || defaultSitemapUrl(property);
+    const { data } = await client.sitemaps.get({ siteUrl: property, feedpath });
+    return { sitemapUrl: feedpath, sitemap: data };
+  });
+}
+
+export async function deleteSitemap(sitemapUrl: string) {
+  if (getAuthMode() === "oauth" && getScopeTier() === "readonly") {
+    throw new Error("Deleting a sitemap needs full access, but this install is in read only mode (GSC_SCOPES=readonly).");
+  }
+  const client = await getSearchConsoleClient();
+  return onProperty(async (property) => {
+    await client.sitemaps.delete({ siteUrl: property, feedpath: sitemapUrl });
+    return { sitemapUrl, deleted: true };
+  });
+}

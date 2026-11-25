@@ -6,7 +6,7 @@
  * Claude Code config for the user. The goal is that nobody ever edits a
  * config file or reads an OAuth tutorial to get started.
  *
- * Privacy model: tokens are cached at ~/.mcp-gsc-tool/ on this machine and every
+ * Privacy model: tokens are cached at ~/.claude/mcp-gsc-tool/ on this machine and every
  * API call goes straight from this machine to Google. Nothing touches any
  * third party server.
  */
@@ -61,7 +61,7 @@ Options:
   --help              Show this help
 
 Your Search Console data goes straight from this machine to Google.
-Tokens are stored locally in ~/.mcp-gsc-tool/ and never leave this machine.
+Tokens are stored locally in ~/.claude/mcp-gsc-tool/ and never leave this machine.
 `.trim();
 
 function parseArgs(argv: string[]): SetupOptions {
@@ -144,7 +144,7 @@ function makePrompter(nonInteractive: boolean): Prompter {
   };
 }
 
-function buildEnv(opts: { scopes: ScopeTier; site: string; secretsPath: string | null }): Record<string, string> {
+export function buildEnv(opts: { scopes: ScopeTier; site: string; secretsPath: string | null }): Record<string, string> {
   const env: Record<string, string> = {
     GSC_AUTH_MODE: "oauth",
     GSC_SCOPES: opts.scopes,
@@ -156,7 +156,10 @@ function buildEnv(opts: { scopes: ScopeTier; site: string; secretsPath: string |
     env.GSC_OAUTH_CLIENT_ID = process.env.GSC_OAUTH_CLIENT_ID;
     env.GSC_OAUTH_CLIENT_SECRET = process.env.GSC_OAUTH_CLIENT_SECRET;
   }
-  // With the embedded client, no credential env vars are needed at all.
+  // Optional extras set in the shell are carried into the Claude Code entry.
+  for (const k of ["BING_API_KEY", "BING_SITE_URL", "YANDEX_WEBMASTER_TOKEN", "YANDEX_HOST", "PSI_API_KEY", "GSC_READ_ONLY", "GSC_SITE_URLS"]) {
+    if (process.env[k]) env[k] = process.env[k];
+  }
   return env;
 }
 
@@ -168,13 +171,18 @@ function serverEntry(env: Record<string, string>) {
   };
 }
 
+/**
+ * `claude mcp add-json` args. Not `mcp add -e K=V name`: its -e is variadic and swallows the server name
+ * ("Invalid environment variable format: mcp-gsc-tool"); JSON also keeps values with spaces intact.
+ */
+export function claudeAddArgs(env: Record<string, string>): string[] {
+  return ["mcp", "add-json", "--scope", "user", "mcp-gsc-tool", JSON.stringify({ type: "stdio", ...serverEntry(env) })];
+}
+
 function writeCodeConfig(env: Record<string, string>, force: boolean, dryRun: boolean): boolean {
-  const envFlags: string[] = [];
-  for (const [k, v] of Object.entries(env)) {
-    envFlags.push("-e", `${k}=${v}`);
-  }
-  const addArgs = ["mcp", "add", "--scope", "user", ...envFlags, "mcp-gsc-tool", "--", "bun", "--no-env-file", SERVER_ENTRY];
-  const manualCommand = `claude ${addArgs.map((a) => (a.includes(" ") ? JSON.stringify(a) : a)).join(" ")}`;
+  const addArgs = claudeAddArgs(env);
+  const shellQuote = (a: string) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, "'\\''")}'`);
+  const manualCommand = `claude ${addArgs.map(shellQuote).join(" ")}`;
 
   if (dryRun) {
     console.log("\n[dry run] Would run:");

@@ -81,10 +81,17 @@ export async function submitBatch(
   }
 
   const results: SubmitResult[] = [];
+  let quotaHit = false;
 
   for (const url of urls) {
+    if (quotaHit) {
+      results.push({ url, type: action, notifyTime: null, success: false, error: "skipped: daily quota exhausted", note: "Not sent." });
+      continue;
+    }
     const result = await submitUrl(url, action);
     results.push(result);
+    // 429 on publish is the daily quota (publish is never retried): the rest would all fail.
+    if (result.error?.includes("(HTTP 429)")) quotaHit = true;
 
     // Small delay to avoid rate limiting
     if (urls.length > 10) {
@@ -104,4 +111,17 @@ export async function submitBatch(
       note: `Daily quota is 200 URL notifications. ${succeeded} submitted successfully, ${failed} failed.`,
     },
   };
+}
+
+/** Last URL_UPDATED / URL_DELETED notification Google recorded for this URL (Indexing API getMetadata). */
+export async function getIndexingStatus(url: string) {
+  const indexing = await getIndexingClient();
+  try {
+    const { data } = await indexing.urlNotifications.getMetadata({ url });
+    return { url, latestUpdate: data.latestUpdate ?? null, latestRemove: data.latestRemove ?? null };
+  } catch (err: any) {
+    // 404 means this URL was never submitted through the Indexing API.
+    if (err.status === 404) return { url, latestUpdate: null, latestRemove: null, note: "No Indexing API notification on record for this URL." };
+    throw err;
+  }
 }

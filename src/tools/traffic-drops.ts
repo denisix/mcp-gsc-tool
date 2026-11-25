@@ -1,4 +1,4 @@
-import { fetchAllRows, getDateRange, getPriorDateRange } from "../analytics.js";
+import { COMPARE_LAG_DAYS, fetchAllRows, getDateRange, getPriorDateRange } from "../analytics.js";
 
 interface TrafficDrop {
   page: string;
@@ -12,8 +12,8 @@ interface TrafficDrop {
 }
 
 export async function trafficDrops(days: number = 28): Promise<TrafficDrop[]> {
-  const current = getDateRange(days);
-  const prior = getPriorDateRange(days);
+  const current = getDateRange(days, new Date(), COMPARE_LAG_DAYS);
+  const prior = getPriorDateRange(days, new Date(), COMPARE_LAG_DAYS);
 
   const [currentRows, priorRows] = await Promise.all([
     fetchAllRows({ startDate: current.startDate, endDate: current.endDate, dimensions: ["page"] }),

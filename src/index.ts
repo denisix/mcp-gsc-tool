@@ -20,8 +20,20 @@ import { advancedSearchAnalytics } from "./tools/advanced-search-analytics.js";
 import { checkAlerts } from "./tools/check-alerts.js";
 import { contentRecommendations } from "./tools/content-recommendations.js";
 import { multiSiteDashboard } from "./tools/multi-site-dashboard.js";
-import { submitUrl, submitBatch } from "./tools/submit-url.js";
-import { submitSitemap, listSitemaps } from "./tools/submit-sitemap.js";
+import { submitUrl, submitBatch, getIndexingStatus } from "./tools/submit-url.js";
+import { submitSitemap, listSitemaps, getSitemap, deleteSitemap } from "./tools/submit-sitemap.js";
+import { listAllSites, addSite, deleteSite } from "./tools/sites.js";
+import { comparePeriods } from "./tools/compare-periods.js";
+import { drilldown } from "./tools/drilldown.js";
+import { batchInspectUrls, MAX_BATCH_INSPECT } from "./tools/batch-inspect.js";
+import { indexingCoverage } from "./tools/indexing-coverage.js";
+import { MAX_AUDIT_PAGES, pageSpeed, siteAudit } from "./tools/pagespeed.js";
+import { exportCsv } from "./tools/export-csv.js";
+import { bingConfigured } from "./bing.js";
+import { yandexConfigured } from "./yandex.js";
+import { bingQueryStats, bingTraffic, bingUrlInfo, bingSiteIssues, bingSubmitUrls } from "./tools/bing.js";
+import { yandexPopularQueries, yandexSiteHealth, yandexRecrawl } from "./tools/yandex.js";
+import { compareEngines } from "./tools/compare-engines.js";
 // v2.3 image SEO tools — paired with the Image SEO post on suganthan.com.
 // v2.4 generative AI tools — the Generative AI report has no API, but AI Mode
 // conversation exhaust leaks into the regular query dimension. See the tool
@@ -61,10 +73,17 @@ const SITE_URL_PARAM = z
     "GSC property for this call, e.g. sc-domain:example.com or https://www.example.com/. " +
     "Omit to use the default property (GSC_SITE_URL). Your credentials must have access to it."
   );
-const NO_PROPERTY_TOOLS = new Set(["multi_site_dashboard", "submit_url", "submit_batch"]);
+const NO_PROPERTY_TOOLS = new Set([
+  "multi_site_dashboard", "submit_url", "submit_batch", "indexing_status", "pagespeed", "list_sites", "add_site", "delete_site",
+  "bing_query_stats", "bing_traffic", "bing_url_info", "bing_site_issues", "bing_submit_urls", "yandex_popular_queries", "yandex_site_health", "yandex_recrawl",
+]);
+// Tools that change state at Google. GSC_READ_ONLY=1 leaves them unregistered.
+const WRITE_TOOLS = new Set(["submit_url", "submit_batch", "submit_sitemap", "delete_sitemap", "add_site", "delete_site", "bing_submit_urls", "yandex_recrawl"]);
+const READ_ONLY = ["1", "true", "yes"].includes((process.env.GSC_READ_ONLY ?? "").toLowerCase());
 
 /** Registers a tool; property tools get `site_url` and run inside withSiteUrl(). */
 function tool(name: string, description: string, shape: z.ZodRawShape, handler: (args: any) => ToolResult | Promise<ToolResult>) {
+  if (READ_ONLY && WRITE_TOOLS.has(name)) return;
   if (NO_PROPERTY_TOOLS.has(name)) return server.tool(name, description, shape, handler);
   server.tool(name, description, { ...shape, site_url: SITE_URL_PARAM }, (args) => withSiteUrl(args.site_url, () => handler(args)));
 }
@@ -272,10 +291,11 @@ tool(
     order_direction: z.string().default("descending").describe("Sort direction: ascending, descending"),
     search_type: z.enum(["web", "image", "video", "news", "discover", "googleNews", "webMultimodal"]).optional().describe("Filter by GSC search surface. Defaults to web. Use 'image' for Google Images, 'webMultimodal' for Google Lens, Circle to Search and image uploads."),
     filter_lists: filterListsSchema,
+    hourly: z.boolean().default(false).describe("Hourly data (dataState hourly_all, adds the 'hour' dimension). Covers only the last ~10 days, including today's partial data. Use to check a release or incident on the same day"),
   },
-  async ({ days, dimensions, filters, row_limit, order_by, order_direction, search_type, filter_lists }) => {
-    const results = await advancedSearchAnalytics(days, dimensions, filters, row_limit, order_by, order_direction, search_type, filter_lists);
-    const wrapped = withMeta(results, "advanced_search_analytics", { days, dimensions, filters, filter_lists, row_limit, order_by, search_type });
+  async ({ days, dimensions, filters, row_limit, order_by, order_direction, search_type, filter_lists, hourly }) => {
+    const results = await advancedSearchAnalytics(days, dimensions, filters, row_limit, order_by, order_direction, search_type, filter_lists, hourly);
+    const wrapped = withMeta(results, "advanced_search_analytics", { days, dimensions, filters, filter_lists, row_limit, order_by, search_type, hourly });
     return {
       content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
     };
@@ -340,7 +360,7 @@ tool(
 // 17. Submit URL for Indexing
 tool(
   "submit_url",
-  "Submit a URL to Google's Indexing API to request crawling and indexing. Works for notifying Google of new or updated content. Note: Google officially supports this for JobPosting/BroadcastEvent schema but processes all page types." + GUARDRAIL_SUFFIX,
+  "Submit a URL to Google's Indexing API to request crawling and indexing. Google only supports the Indexing API for pages with JobPosting or BroadcastEvent (livestream) structured data; for other pages it may be ignored, and submit_sitemap is the supported route." + GUARDRAIL_SUFFIX,
   {
     url: z.string().describe("The full URL to submit for indexing"),
     action: z.enum(["URL_UPDATED", "URL_DELETED"]).default("URL_UPDATED").describe("URL_UPDATED for new/changed content, URL_DELETED for removed pages"),
@@ -478,6 +498,271 @@ tool(
       content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
     };
   }
+);
+
+// ---------------------------------------------------------------------------
+// Properties, sitemaps, indexing status
+// ---------------------------------------------------------------------------
+const json = (v: unknown): ToolResult => ({ content: [{ type: "text", text: JSON.stringify(v, null, 2) }] });
+const searchTypeSchema = z.enum(["web", "image", "video", "news", "discover", "googleNews"]).optional().describe("Search surface. Defaults to web");
+const filtersSchema = z.array(z.object({
+  dimension: z.string().describe("query, page, country, device or searchAppearance"),
+  operator: z.string().describe("contains, notContains, equals, notEquals, includingRegex, excludingRegex"),
+  expression: z.string(),
+})).default([]).describe("Dimension filters (AND)");
+
+tool(
+  "list_sites",
+  "List every site these credentials can access: Search Console properties with permission level (siteOwner, siteFullUser, siteRestrictedUser, siteUnverifiedUser), plus Bing and Yandex sites when configured. Pass a listed site as site_url (Google) or site (bing_* / yandex_*) to query it.",
+  {},
+  async () => json(await listAllSites())
+);
+
+tool(
+  "add_site",
+  "Add a property to Search Console (it must still be verified before it returns data)." + GUARDRAIL_SUFFIX,
+  { property: z.string().describe("e.g. sc-domain:example.com or https://www.example.com/") },
+  async ({ property }) => json(await addSite(property))
+);
+
+tool(
+  "delete_site",
+  "Remove a property from this account's Search Console. Data is kept by Google and returns if the property is re-added. Confirm with the user first." + GUARDRAIL_SUFFIX,
+  { property: z.string().describe("e.g. sc-domain:example.com or https://www.example.com/") },
+  async ({ property }) => json(await deleteSite(property))
+);
+
+tool(
+  "get_sitemap",
+  "Status of one submitted sitemap: last submitted/downloaded, pending, warnings, errors, and submitted vs indexed counts per content type." + GUARDRAIL_SUFFIX,
+  { sitemap_url: z.string().optional().describe("Full sitemap URL (defaults to {site_url}/sitemap.xml)") },
+  async ({ sitemap_url }) => json(withMeta(await getSitemap(sitemap_url), "get_sitemap", { sitemap_url }))
+);
+
+tool(
+  "delete_sitemap",
+  "Remove a sitemap from Search Console (Google stops reading it; already indexed pages are not removed). Confirm with the user first." + GUARDRAIL_SUFFIX,
+  { sitemap_url: z.string().describe("Full URL of the submitted sitemap") },
+  async ({ sitemap_url }) => json(await deleteSitemap(sitemap_url))
+);
+
+tool(
+  "indexing_status",
+  "Last Indexing API notification Google recorded for a URL (latest URL_UPDATED / URL_DELETED and when). Shows what was submitted, not whether the page is indexed: use inspect_url for that." + GUARDRAIL_SUFFIX,
+  { url: z.string().describe("Full URL") },
+  async ({ url }) => json(await getIndexingStatus(url))
+);
+
+// ---------------------------------------------------------------------------
+// Analysis
+// ---------------------------------------------------------------------------
+tool(
+  "compare_periods",
+  "Period-over-period (or year-over-year) comparison: totals with % change, plus per query/page top gainers, top losers, new and lost items. Both windows end 3 days back so partial recent data does not read as a drop." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  {
+    days: z.number().int().min(1).max(240).default(28).describe("Days per period"),
+    dimension: z.enum(["query", "page", "country", "device", "searchAppearance"]).default("query").describe("What to compare"),
+    limit: z.number().int().min(1).max(200).default(25).describe("Rows per list (gainers, losers, new, lost)"),
+    filters: filtersSchema,
+    search_type: searchTypeSchema,
+    year_over_year: z.boolean().default(false).describe("Compare against the same window 52 weeks earlier instead of the previous period (removes seasonality)"),
+  },
+  async ({ days, dimension, limit, filters, search_type, year_over_year }) =>
+    json(withMeta(await comparePeriods(days, dimension, limit, filters, search_type, year_over_year), "compare_periods", { days, dimension, filters, search_type, year_over_year }))
+);
+
+tool(
+  "page_queries",
+  "Drill down: pass `page` to get the queries that bring it traffic, or `query` to get the pages that rank for it (several pages for one query = possible cannibalization)." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  {
+    page: z.string().optional().describe("Exact page URL as GSC reports it"),
+    query: z.string().optional().describe("Exact search query"),
+    days: z.number().default(28).describe("Number of days to analyse"),
+    limit: z.number().int().min(1).max(1000).default(50).describe("Maximum rows returned"),
+    search_type: searchTypeSchema,
+  },
+  async ({ page, query, days, limit, search_type }) =>
+    json(withMeta(await drilldown({ page, query, days, limit, searchType: search_type }), "page_queries", { page, query, days }))
+);
+
+tool(
+  "batch_inspect_urls",
+  `Run URL Inspection on up to ${MAX_BATCH_INSPECT} URLs (3 at a time): indexed or not, coverage state, last crawl, canonical match and issues, with a summary. Stops and returns partial results if the daily inspection quota (2,000 per property) runs out.` + GUARDRAIL_SUFFIX,
+  { urls: z.array(z.string()).min(1).max(MAX_BATCH_INSPECT).describe("URLs on this property") },
+  async ({ urls }) => json(withMeta(await batchInspectUrls(urls), "batch_inspect_urls", { count: urls.length }))
+);
+
+tool(
+  "indexing_coverage",
+  "Cross-check the sitemap against search visibility: sitemap URLs with no impressions (likely not indexed or never shown), pages with impressions missing from the sitemap, and coverage %. Reads the property's submitted sitemaps (or sitemap_url), follows sitemap indexes, handles .xml.gz. Optionally URL-inspects a sample of the no-impression URLs." + GUARDRAIL_SUFFIX,
+  {
+    sitemap_url: z.string().optional().describe("Sitemap or sitemap index URL. Defaults to every sitemap submitted in GSC"),
+    days: z.number().default(90).describe("Days of search data to compare against"),
+    limit: z.number().int().min(1).max(1000).default(50).describe("URLs listed per group (totals always cover everything)"),
+    inspect_sample: z.number().int().min(0).max(20).default(0).describe("URL-inspect this many no-impression URLs (uses inspection quota)"),
+  },
+  async ({ sitemap_url, days, limit, inspect_sample }) =>
+    json(withMeta(await indexingCoverage({ sitemapUrl: sitemap_url, days, limit, inspectSample: inspect_sample }), "indexing_coverage", { sitemap_url, days, inspect_sample }))
+);
+
+tool(
+  "pagespeed",
+  "PageSpeed Insights / Lighthouse audit of one URL: real-user CrUX Core Web Vitals (LCP, INP, CLS, FCP, TTFB at p75, page and origin), lab metrics, scores for performance, accessibility, best practices and SEO, the biggest speed savings, and every failed check (SEO: indexability, title/meta, links, hreflang, canonical, robots.txt; plus accessibility and best-practice errors). No Search Console access needed. Takes 10-40 s.",
+  {
+    url: z.string().describe("Public page URL"),
+    strategy: z.enum(["mobile", "desktop"]).default("mobile").describe("Google indexes mobile-first, so mobile is the default"),
+  },
+  async ({ url, strategy }) => json(await pageSpeed(url, strategy))
+);
+
+tool(
+  "site_audit",
+  `Lighthouse audit of up to ${MAX_AUDIT_PAGES} pages at once: the given urls, or the property's top pages by clicks. Returns scores per page and failed checks (SEO, accessibility, best practices) grouped by check with the pages each affects, so template-wide problems stand out. Takes about 20 s per 2 pages.` + GUARDRAIL_SUFFIX,
+  {
+    urls: z.array(z.string()).max(MAX_AUDIT_PAGES).optional().describe("Pages to audit; omit to use the top pages by clicks"),
+    pages: z.number().int().min(1).max(MAX_AUDIT_PAGES).default(5).describe("How many top pages when urls is omitted"),
+    strategy: z.enum(["mobile", "desktop"]).default("mobile"),
+  },
+  async ({ urls, pages, strategy }) => json(withMeta(await siteAudit({ urls, pages, strategy }), "site_audit", { pages, strategy }, "PageSpeed Insights API + Google Search Console API (live data)",
+    "Scores and checks come directly from Lighthouse via the PageSpeed Insights API; a lab run varies between runs. Base your analysis only on this data."))
+);
+
+tool(
+  "export_csv",
+  "Export a full Search Analytics report (all rows, past the 25k API page limit, up to 1M) to a new CSV file on this machine, and return the path, row count and a 5-row preview. Use for large datasets or spreadsheets instead of pulling rows into the chat. Never overwrites an existing file.",
+  {
+    dimensions: z.array(z.string()).min(1).default(["query", "page"]).describe("query, page, country, device, date, searchAppearance"),
+    days: z.number().default(28).describe("Number of days"),
+    filters: filtersSchema,
+    search_type: searchTypeSchema,
+    max_rows: z.number().int().min(1).max(1_000_000).default(1_000_000).describe("Stop after this many rows"),
+    output_path: z.string().optional().describe("Where to write the .csv (default: the system temp folder)"),
+  },
+  async ({ dimensions, days, filters, search_type, max_rows, output_path }) =>
+    json(withMeta(await exportCsv({ dimensions, days, filters, searchType: search_type, maxRows: max_rows, outputPath: output_path }), "export_csv", { dimensions, days }))
+);
+
+// ---------------------------------------------------------------------------
+// Bing Webmaster (BING_API_KEY) and Yandex Webmaster (YANDEX_WEBMASTER_TOKEN)
+// Registered only when their credentials are set.
+// ---------------------------------------------------------------------------
+const bingSiteParam = z.string().optional().describe("Bing site exactly as verified, e.g. https://www.example.com/ (default BING_SITE_URL, else derived from GSC_SITE_URL)");
+const yandexSiteParam = z.string().optional().describe("Yandex host, e.g. https://example.com or a host_id like https:example.com:443 (default YANDEX_HOST, else derived from GSC_SITE_URL)");
+
+if (bingConfigured()) {
+  tool(
+    "bing_query_stats",
+    "Bing search queries for the site: clicks, impressions, CTR and average position, summed over the window. Bing updates this weekly." + GUARDRAIL_SUFFIX,
+    { site: bingSiteParam, days: z.number().default(28), limit: z.number().int().min(1).max(1000).default(50) },
+    async (a) => json(await bingQueryStats(a))
+  );
+  tool(
+    "bing_traffic",
+    "Bing daily clicks and impressions with totals, plus the latest crawl stats (pages crawled, in index, crawl errors, robots.txt blocks, HTTP status counts, malware)." + GUARDRAIL_SUFFIX,
+    { site: bingSiteParam, days: z.number().default(90) },
+    async (a) => json(await bingTraffic(a))
+  );
+  tool(
+    "bing_url_info",
+    "What Bing knows about one URL: HTTP status, discovery and last crawl date, size, anchors.",
+    { url: z.string(), site: bingSiteParam },
+    async ({ url, site }) => json(await bingUrlInfo(url, site))
+  );
+  tool(
+    "bing_site_issues",
+    "Bing errors for the site: crawl issues per URL (HTTP errors, blocked by robots.txt, DNS, timeouts, malware), URLs blocked from Bing, and submitted sitemaps / feeds with status and URL count." + GUARDRAIL_SUFFIX,
+    { site: bingSiteParam },
+    async ({ site }) => json(await bingSiteIssues(site))
+  );
+  tool(
+    "bing_submit_urls",
+    "Submit up to 500 URLs to Bing for crawling (SubmitUrlBatch). Checks the daily quota first." + GUARDRAIL_SUFFIX,
+    { urls: z.array(z.string()).min(1).max(500), site: bingSiteParam },
+    async ({ urls, site }) => json(await bingSubmitUrls(urls, site))
+  );
+}
+
+if (yandexConfigured()) {
+  tool(
+    "yandex_popular_queries",
+    "Yandex search queries for the site: clicks, impressions, CTR and average position. Yandex lists only its popular queries for the site." + GUARDRAIL_SUFFIX,
+    {
+      site: yandexSiteParam,
+      days: z.number().default(28),
+      limit: z.number().int().min(1).max(500).default(50),
+      order_by: z.enum(["TOTAL_CLICKS", "TOTAL_SHOWS"]).default("TOTAL_CLICKS"),
+      device: z.enum(["ALL", "DESKTOP", "MOBILE_AND_TABLET", "MOBILE", "TABLET"]).default("ALL"),
+    },
+    async ({ site, days, limit, order_by, device }) => json(await yandexPopularQueries({ site, days, limit, orderBy: order_by, device }))
+  );
+  tool(
+    "yandex_site_health",
+    "Yandex Webmaster health: SQI (site quality index), pages in search and excluded, active diagnostics problems by severity, pages-in-search trend, crawl results by HTTP status, pages added to / removed from search, broken internal links, and recently removed pages with the reason." + GUARDRAIL_SUFFIX,
+    { site: yandexSiteParam, days: z.number().default(90) },
+    async (a) => json(await yandexSiteHealth(a))
+  );
+  tool(
+    "yandex_recrawl",
+    "Queue URLs for Yandex recrawl. The daily quota is per site and often small; URLs past it are returned as skipped." + GUARDRAIL_SUFFIX,
+    { urls: z.array(z.string()).min(1).max(100), site: yandexSiteParam },
+    async ({ urls, site }) => json(await yandexRecrawl(urls, site))
+  );
+}
+
+tool(
+  "compare_engines",
+  "Google vs Bing vs Yandex for the same window: clicks, impressions, CTR, click share and top queries per engine. Engines without credentials (BING_API_KEY, YANDEX_WEBMASTER_TOKEN) are listed as not configured; one engine failing does not stop the others." + GUARDRAIL_SUFFIX,
+  {
+    days: z.number().default(28),
+    limit: z.number().int().min(1).max(50).default(10).describe("Top queries per engine"),
+    bing_site: bingSiteParam,
+    yandex_site: yandexSiteParam,
+  },
+  async ({ days, limit, bing_site, yandex_site }) =>
+    json(withMeta(await compareEngines({ days, limit, bingSite: bing_site, yandexSite: yandex_site }), "compare_engines", { days },
+      "Google Search Console, Bing Webmaster and Yandex Webmaster APIs (live data)",
+      "Numbers come directly from each engine's API. Base your analysis only on this data. Do not invent or assume additional context."))
+);
+
+// ---------------------------------------------------------------------------
+// Prompts: guided workflows that chain the tools above
+// ---------------------------------------------------------------------------
+const siteArg = { name: "site_url", description: "GSC property (defaults to GSC_SITE_URL)" };
+const onSite = (a: Record<string, string>) => (a.site_url ? ` Use site_url "${a.site_url}" on every call.` : "");
+
+server.prompt(
+  "weekly_seo_report",
+  "Weekly SEO report: what changed, why, and what to do next",
+  [siteArg],
+  (a) => `Write a weekly SEO report for this Search Console property.${onSite(a)}
+1. site_snapshot (days 7) for the headline numbers.
+2. compare_periods (days 7, dimension query) and compare_periods (days 7, dimension page) for movers.
+3. check_alerts (days 7) for anything urgent.
+4. quick_wins and ctr_opportunities for next actions.
+Report: headline change, top 5 gainers and losers with likely causes, alerts by severity, and 3-5 prioritised actions. Quote only numbers the tools returned.`
+);
+
+server.prompt(
+  "diagnose_traffic_drop",
+  "Find the cause of a traffic drop, for the whole site or one page",
+  [siteArg, { name: "page", description: "Page URL that dropped (optional)" }],
+  (a) => `Diagnose a traffic drop${a.page ? ` on ${a.page}` : ""}.${onSite(a)}
+1. compare_periods (days 28${a.page ? `, filters page equals ${a.page}` : ""}) and again with year_over_year true, to separate a real drop from seasonality.
+2. ${a.page ? `page_queries with page ${a.page} to see which queries fell.` : "traffic_drops to find the pages that lost most."}
+3. For the top affected pages: inspect_url (indexing, canonical, robots) and pagespeed (Core Web Vitals).
+4. compare_periods with dimension device and country to see if the drop is segment-specific.
+Classify the cause (ranking loss, CTR loss, demand drop, de-indexing, technical) with the evidence for each, then recommend fixes.`
+);
+
+server.prompt(
+  "indexing_audit",
+  "Audit indexing: sitemap coverage, non-indexed pages and their reasons",
+  [siteArg],
+  (a) => `Audit indexing for this property.${onSite(a)}
+1. list_sitemaps for errors, warnings and submitted vs indexed counts.
+2. indexing_coverage with inspect_sample 10.
+3. batch_inspect_urls on up to 20 important URLs from impressionsNotInSitemap and inSitemapNoImpressions.
+Group non-indexed URLs by reason (noindex, robots.txt, canonical to another URL, crawled not indexed, discovered not crawled, fetch error), estimate how many URLs each reason covers, and give a fix for each group.`
 );
 
 async function main() {

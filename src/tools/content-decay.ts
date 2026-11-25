@@ -1,4 +1,4 @@
-import { fetchAllRows } from "../analytics.js";
+import { COMPARE_LAG_DAYS, fetchAllRows, getDateRange } from "../analytics.js";
 
 interface DecayingPage {
   page: string;
@@ -12,35 +12,15 @@ interface DecayingPage {
   positionTrend: string;
 }
 
-function formatDate(date: Date): string {
-  return date.toISOString().split("T")[0];
-}
-
 export async function contentDecay(): Promise<DecayingPage[]> {
+  // Three consecutive 30-day windows, newest first, ending before the partial recent days.
   const now = new Date();
-  now.setDate(now.getDate() - 1); // yesterday
-
-  // Period 1: 0-30 days ago (most recent)
-  const p1End = new Date(now);
-  const p1Start = new Date(now);
-  p1Start.setDate(p1Start.getDate() - 29);
-
-  // Period 2: 31-60 days ago
-  const p2End = new Date(p1Start);
-  p2End.setDate(p2End.getDate() - 1);
-  const p2Start = new Date(p2End);
-  p2Start.setDate(p2Start.getDate() - 29);
-
-  // Period 3: 61-90 days ago (oldest)
-  const p3End = new Date(p2Start);
-  p3End.setDate(p3End.getDate() - 1);
-  const p3Start = new Date(p3End);
-  p3Start.setDate(p3Start.getDate() - 29);
+  const [w1, w2, w3] = [0, 30, 60].map((back) => getDateRange(30, now, COMPARE_LAG_DAYS + back));
 
   const [rows1, rows2, rows3] = await Promise.all([
-    fetchAllRows({ startDate: formatDate(p1Start), endDate: formatDate(p1End), dimensions: ["page"] }),
-    fetchAllRows({ startDate: formatDate(p2Start), endDate: formatDate(p2End), dimensions: ["page"] }),
-    fetchAllRows({ startDate: formatDate(p3Start), endDate: formatDate(p3End), dimensions: ["page"] }),
+    fetchAllRows({ startDate: w1.startDate, endDate: w1.endDate, dimensions: ["page"] }),
+    fetchAllRows({ startDate: w2.startDate, endDate: w2.endDate, dimensions: ["page"] }),
+    fetchAllRows({ startDate: w3.startDate, endDate: w3.endDate, dimensions: ["page"] }),
   ]);
 
   const toMap = (rows: typeof rows1) => {

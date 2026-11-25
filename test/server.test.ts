@@ -14,11 +14,11 @@ beforeAll(async () => {
   if (!r.success) throw new AggregateError(r.logs, "bun build failed");
 });
 
-async function rpc(messages: object[], entry: string): Promise<Map<number, any>> {
+async function rpc(messages: object[], entry: string, extraEnv: Record<string, string> = {}): Promise<Map<number, any>> {
   const proc = Bun.spawn(["bun", "--no-env-file", entry], {
     cwd: entry === entries.bundle ? outdir : undefined,
     stdin: "pipe", stdout: "pipe", stderr: "ignore",
-    env: { ...process.env, GSC_SITE_URL: "sc-domain:x.com", GSC_KEY_FILE: "/nonexistent", GSC_AUTH_MODE: "service_account" },
+    env: { ...process.env, GSC_SITE_URL: "sc-domain:x.com", GSC_KEY_FILE: "/nonexistent", GSC_AUTH_MODE: "service_account", BING_API_KEY: "", YANDEX_WEBMASTER_TOKEN: "", ...extraEnv },
   });
   proc.stdin.write(messages.map((m) => JSON.stringify(m)).join("\n") + "\n");
   proc.stdin.end();
@@ -31,16 +31,38 @@ const init = [
   { jsonrpc: "2.0", method: "notifications/initialized" },
 ];
 
+const NO_SITE = ["submit_url", "submit_batch", "multi_site_dashboard", "indexing_status", "pagespeed", "list_sites", "add_site", "delete_site",
+  "bing_query_stats", "bing_traffic", "bing_url_info", "bing_site_issues", "bing_submit_urls", "yandex_popular_queries", "yandex_site_health", "yandex_recrawl"];
+
 for (const [kind, entry] of Object.entries(entries)) {
+test(`${kind}: Bing / Yandex tools appear only with their credentials; their write tools obey GSC_READ_ONLY`, async () => {
+  const list = [...init, { jsonrpc: "2.0", id: 2, method: "tools/list" }];
+  const keys = { BING_API_KEY: "k", YANDEX_WEBMASTER_TOKEN: "t" };
+  const names: string[] = (await rpc(list, entry, keys)).get(2).result.tools.map((t: any) => t.name);
+  expect(names).toHaveLength(44);
+  for (const n of ["bing_query_stats", "bing_submit_urls", "yandex_site_health", "yandex_recrawl"]) expect(names).toContain(n);
+  const ro: string[] = (await rpc(list, entry, { ...keys, GSC_READ_ONLY: "1" })).get(2).result.tools.map((t: any) => t.name);
+  expect(ro).toHaveLength(36);
+  expect(ro).not.toContain("bing_submit_urls");
+  expect(ro).not.toContain("yandex_recrawl");
+}, 20_000);
+test(`${kind}: GSC_READ_ONLY=1 drops every write tool; prompts are listed`, async () => {
+  const res = await rpc([...init, { jsonrpc: "2.0", id: 2, method: "tools/list" }, { jsonrpc: "2.0", id: 3, method: "prompts/list" }], entry, { GSC_READ_ONLY: "1" });
+  const names: string[] = res.get(2).result.tools.map((t: any) => t.name);
+  expect(names).toHaveLength(30);
+  for (const w of ["submit_url", "submit_batch", "submit_sitemap", "delete_sitemap", "add_site", "delete_site"]) expect(names).not.toContain(w);
+  expect(res.get(3).result.prompts.map((p: any) => p.name)).toEqual(["weekly_seo_report", "diagnose_traffic_drop", "indexing_audit"]);
+}, 20_000);
+
 test(`${kind}: registers the CLI tool set with site_url where it belongs`, async () => {
   const res = await rpc([...init, { jsonrpc: "2.0", id: 2, method: "tools/list" }], entry);
   const tools: any[] = res.get(2).result.tools;
   const names = tools.map((t) => t.name);
-  expect(names).toHaveLength(22);
+  expect(names).toHaveLength(36);
   for (const gone of ["generate_report", "image_page_audit", "image_keyword_overview", "compare_web_vs_image"]) expect(names).not.toContain(gone);
   for (const t of tools) {
     const hasSite = "site_url" in (t.inputSchema.properties ?? {});
-    expect([t.name, hasSite]).toEqual([t.name, !["submit_url", "submit_batch", "multi_site_dashboard"].includes(t.name)]);
+    expect([t.name, hasSite]).toEqual([t.name, !NO_SITE.includes(t.name)]);
     expect(t.description).not.toContain("PRESENTATION"); // no Desktop-artifact rendering instructions
   }
 }, 20_000);
@@ -65,7 +87,11 @@ test(`${kind}: the official MCP SDK client can connect, list and call tools`, as
   try {
     expect(client.getServerVersion()).toEqual({ name: "mcp-gsc-tool", version: "2.5.1" });
     const { tools } = await client.listTools(); // the SDK validates the response against its own schemas
-    expect(tools).toHaveLength(22);
+    expect(tools).toHaveLength(36);
+    const { prompts } = await client.listPrompts();
+    expect(prompts).toHaveLength(3);
+    const p = await client.getPrompt({ name: "diagnose_traffic_drop", arguments: { page: "https://x.com/a" } });
+    expect((p.messages[0].content as any).text).toContain("https://x.com/a");
     await client.ping();
     const r: any = await client.callTool({ name: "quick_wins", arguments: { days: "x" } });
     expect(r.isError).toBe(true);
