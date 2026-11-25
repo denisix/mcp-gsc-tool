@@ -976,3 +976,12 @@ test("site_url: a bare domain or loose URL resolves to the accessible property; 
   expect(miss).toContain("not a Search Console property");
   expect(miss).not.toContain("other.com");
 });
+
+test("setup run through bunx registers the bunx command, not bunx's temporary cache path", async () => {
+  const { serverEntry } = await import("../src/setup.ts");
+  const cache = "/home/u/.bun/install/cache/.bunx-1000/@denisixnpm/mcp-gsc-tool@latest/node_modules/@denisixnpm/mcp-gsc-tool/dist/mcp-gsc-tool.js";
+  expect(serverEntry({}, cache)).toEqual({ command: "bunx", args: ["@denisixnpm/mcp-gsc-tool"], env: {} });
+  expect(serverEntry({}, "/tmp/bunx-1000-@denisixnpm/mcp-gsc-tool@latest/node_modules/x/dist/mcp-gsc-tool.js").command).toBe("bunx");
+  const global = "/home/u/.bun/install/global/node_modules/@denisixnpm/mcp-gsc-tool/dist/mcp-gsc-tool.js";
+  expect(serverEntry({}, global)).toEqual({ command: "bun", args: ["--no-env-file", global], env: {} });
+});

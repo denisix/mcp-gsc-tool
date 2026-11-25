@@ -1,6 +1,6 @@
 # mcp-gsc-tool
 
-Google Search Console MCP server for **Claude Code CLI**, run with **bun**. 35 tools (42 with Bing and Yandex) and 3 guided prompts, one runtime dependency (`zod`), runs locally: your data goes straight from your machine to Google.
+Google Search Console MCP server for **Claude Code CLI**, run with **bun**. Also covers Bing Webmaster and Yandex Webmaster. 36 tools (44 with Bing and Yandex) and 3 guided prompts, one runtime dependency (`zod`), runs locally: your data goes straight from your machine to Google.
 
 > **Credits.** A fork of [Suganthan's GSC MCP](https://github.com/Suganthan-Mohanadasan/Suganthans-GSC-MCP) by [Suganthan Mohanadasan](https://suganthan.com/) (Apache 2.0). The analysis tools are his work; this fork trims it to Claude Code + bun, merges the open community PRs and adds security fixes. See [NOTICE](NOTICE).
 
@@ -12,17 +12,9 @@ Needs [bun](https://bun.sh) (the runtime and package manager this project uses i
 curl -fsSL https://bun.sh/install | bash    # macOS / Linux; Windows: powershell -c "irm bun.sh/install.ps1 | iex"
 ```
 
-```bash
-bun add -g @denisixnpm/mcp-gsc-tool    # then use `mcp-gsc-tool setup ...` in place of `bun dist/mcp-gsc-tool.js setup ...` below
-```
+The server is the npm package [`@denisixnpm/mcp-gsc-tool`](https://www.npmjs.com/package/@denisixnpm/mcp-gsc-tool). Nothing to install up front: `bunx` fetches it, and Claude Code starts it with `bunx @denisixnpm/mcp-gsc-tool`. To pin a copy instead, `bun add -g @denisixnpm/mcp-gsc-tool` and use `mcp-gsc-tool` in place of `bunx @denisixnpm/mcp-gsc-tool` below.
 
-Install globally rather than running `bunx ... setup`: setup registers the path it runs from, and bunx's cache path can disappear.
-
-From source:
-
-```bash
-git clone https://github.com/denisix/mcp-gsc-tool && cd mcp-gsc-tool && bun install && bun run build
-```
+From source (for development): `git clone https://github.com/denisix/mcp-gsc-tool && cd mcp-gsc-tool && bun install && bun run build`, then `bun dist/mcp-gsc-tool.js` in place of `bunx @denisixnpm/mcp-gsc-tool`.
 
 ## Connect to Google (pick one)
 
@@ -31,11 +23,13 @@ git clone https://github.com/denisix/mcp-gsc-tool && cd mcp-gsc-tool && bun inst
 1. In [Google Cloud console](https://console.cloud.google.com/), create or select a project, then **APIs & Services > Library**: enable **Google Search Console API**.
 2. **APIs & Services > OAuth consent screen**: user type *External*, fill in the app name and your email, and add your Google account under **Test users**.
 3. **Credentials > Create credentials > OAuth client ID > Desktop app**, then download the JSON.
-4. Run the wizard. It opens the browser, verifies access, lets you pick a property, and registers the server with Claude Code:
+4. Run the wizard. It opens the browser, verifies access, lets you pick a property, and registers the server with Claude Code (as `bunx @denisixnpm/mcp-gsc-tool`):
 
    ```bash
-   bun dist/mcp-gsc-tool.js setup --secrets ~/Downloads/client_secret_XXXX.json
+   bunx @denisixnpm/mcp-gsc-tool setup --secrets ~/Downloads/client_secret_XXXX.json --scopes full
    ```
+
+   `--scopes readonly` if you only want to read. Set `BING_API_KEY`, `YANDEX_WEBMASTER_TOKEN` (see Configuration) in the shell first to include Bing and Yandex. For PageSpeed tools, also enable **PageSpeed Insights API** in the same project.
 
 The token is cached owner-only in `~/.claude/mcp-gsc-tool/`. Re-run with `--reauth` to sign in again or change scopes.
 Note: while the consent screen is in *Testing* mode, Google expires refresh tokens after 7 days. Click **Publish app** on the consent screen to avoid weekly sign-ins (no verification is needed for your own use).
@@ -50,10 +44,12 @@ Note: while the consent screen is in *Testing* mode, Google expires refresh toke
    ```bash
    claude mcp add mcp-gsc-tool --scope user \
      -e GSC_KEY_FILE=/path/to/key.json -e GSC_SITE_URL=sc-domain:example.com \
-     -- bun --no-env-file /path/to/mcp-gsc-tool/dist/mcp-gsc-tool.js
+     -- bunx @denisixnpm/mcp-gsc-tool
    ```
 
 **URL submission (optional).** `submit_url` and `submit_batch` also need the **Web Search Indexing API** enabled, and OAuth needs full scopes (`setup --scopes full`).
+
+Check with `claude mcp get mcp-gsc-tool` (or `/mcp` inside Claude Code). Bunx ignores the project's `.env` here: the package runs with `--no-env-file`, so a repo's `.env` can't override these settings.
 
 Then start `claude` and ask something like *"What are my quick wins?"* or *"Which pages lost traffic this month and why?"*.
 
@@ -75,7 +71,7 @@ Then start `claude` and ask something like *"What are my quick wins?"* or *"Whic
 | `PSI_API_KEY` | PageSpeed Insights key. Not needed with OAuth: enable **PageSpeed Insights API** in your Cloud project and sign in with `setup` (it requests `openid`), and PSI calls use your project's quota. Without either, the shared keyless quota is often exhausted (HTTP 429) |
 | `GSC_TOKEN_DIR` | Where the OAuth token is cached (default `~/.claude/mcp-gsc-tool`, or `$CLAUDE_CONFIG_DIR/mcp-gsc-tool`; tokens in the older `~/.mcp-gsc-tool` and `~/.gsc-mcp` are still read) |
 
-`setup` copies any of the optional variables above that are set in your shell into the Claude Code entry, e.g. `BING_API_KEY=... bun dist/mcp-gsc-tool.js setup --secrets ...`. To add one later: `claude mcp remove mcp-gsc-tool` and register again.
+`setup` copies any of the optional variables above that are set in your shell into the Claude Code entry, e.g. `BING_API_KEY=... bunx @denisixnpm/mcp-gsc-tool setup --secrets ...`. To add one later: `claude mcp remove mcp-gsc-tool` and register again.
 
 Every tool that queries a property also accepts `site_url` per call (Bing / Yandex tools: `site`), so one server covers all sites your credentials can see. `list_sites` lists them for all three engines; a bare `example.com` is matched to the site as verified in Bing / Yandex, and `compare_engines` with `site_url` uses that site on every engine.
 

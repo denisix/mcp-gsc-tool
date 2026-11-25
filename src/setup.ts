@@ -24,6 +24,7 @@ import {
   type ScopeTier,
 } from "./oauth.js";
 import { embeddedClientAvailable } from "./embedded-client.js";
+import { name as PACKAGE_NAME } from "../package.json";
 
 // Register whatever entry is running setup (src/index.ts, or the dist/ bundle), so the
 // Claude Code entry points at this exact copy.
@@ -163,12 +164,13 @@ export function buildEnv(opts: { scopes: ScopeTier; site: string; secretsPath: s
   return env;
 }
 
-function serverEntry(env: Record<string, string>) {
-  return {
-    command: "bun",
-    args: ["--no-env-file", SERVER_ENTRY],
-    env,
-  };
+/**
+ * Run from bunx's cache (bunx @denisixnpm/mcp-gsc-tool setup), the file path would vanish when bun clears
+ * that cache, so register the bunx command itself; the package shebang still applies --no-env-file.
+ */
+export function serverEntry(env: Record<string, string>, entry = SERVER_ENTRY) {
+  if (/[\\/]\.?bunx-[^\\/]*[\\/]/.test(entry)) return { command: "bunx", args: [PACKAGE_NAME], env };
+  return { command: "bun", args: ["--no-env-file", entry], env };
 }
 
 /**
