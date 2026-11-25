@@ -3,6 +3,7 @@
  * (+ webmaster:verify for recrawl), from https://oauth.yandex.ru/authorize?response_type=token&client_id=<app id>.
  */
 import { request } from "./google.js";
+import { hostOf } from "./property-candidates.js";
 
 const BASE = "https://api.webmaster.yandex.net/v4";
 
@@ -34,7 +35,6 @@ const getUserId = () => {
 };
 
 /** Bare hostname of a URL, sc-domain: property, or host. */
-const hostOf = (s: string) => s.replace(/^sc-domain:/, "").replace(/^https?:\/\//, "").replace(/[:/].*$/, "").toLowerCase();
 
 /** Every host in the Yandex Webmaster account. */
 export const yandexHosts = async () => listHosts(await getUserId());
@@ -74,6 +74,6 @@ export async function yandexHostPath(site?: string): Promise<{ path: string; hos
     hosts.find((h) => h.host_id === want) ??
     hosts.filter((h) => hostOf(h.ascii_host_url) === target).sort((a, b) => Number(b.ascii_host_url.startsWith("https")) - Number(a.ascii_host_url.startsWith("https")))[0] ??
     hosts.find((h) => bare(hostOf(h.ascii_host_url)) === bare(target));
-  if (!match) throw new Error(`${want} is not in this Yandex Webmaster account. Hosts: ${hosts.map((h) => h.ascii_host_url).join(", ") || "none"}`);
+  if (!match) throw new Error(`${want} is not in this Yandex Webmaster account (list_sites shows which hosts are).`);
   return { path: `/user/${uid}/hosts/${encodeURIComponent(match.host_id)}`, hostId: match.host_id, userId: uid };
 }

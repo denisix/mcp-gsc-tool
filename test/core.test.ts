@@ -29,6 +29,7 @@ const state = {
   indexingStatuses: [] as number[],
   retryAfter: "0",
   queryDelayMs: 0,
+  sitesDown: false,
 };
 const scopeOfToken = new Map<string, string>();
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -133,6 +134,10 @@ globalThis.fetch = (async (input: string | URL | Request, init: RequestInit = {}
     return json(200, { urlNotificationMetadata: { url: body.url } });
   }
   if (url.hostname === "www.googleapis.com" && url.pathname.startsWith("/pagespeedonline/")) return url.searchParams.get("url")?.includes("quota") ? json(429, { error: { message: "Quota exceeded" } }) : json(500, { error: { message: "FAILED_DOCUMENT_REQUEST" } });
+  if (url.pathname === "/webmasters/v3/sites") {
+    if (state.sitesDown) return json(503, { error: { message: "sites.list down" } });
+    return json(200, { siteEntry: ["sc-domain:default.com", "sc-domain:other.com", "https://www.prefix.com/", "http://legacy.org/"].map((siteUrl) => ({ siteUrl, permissionLevel: "siteOwner" })) });
+  }
   if (url.pathname.includes("/sitemaps")) return init.method === "PUT" ? new Response(null, { status: 204 }) : json(200, { sitemap: [] });
   return json(404, { error: { message: `unexpected ${url}` } });
 }) as typeof fetch;
@@ -826,17 +831,23 @@ test("multi-site: Bing site matched to the verified one; compare_engines follows
   expect(await bingSite()).toBe("https://default.com/"); // sc-domain:default.com, https preferred
   expect(await bingSite("other.com")).toBe("https://www.other.com/");
   expect(await bingSite("sc-domain:www.other.com")).toBe("https://www.other.com/");
-  await expect(bingSite("nope.com")).rejects.toThrow("Sites: http://default.com/, https://default.com/, https://www.other.com/");
+  const miss = await bingSite("nope.com").catch((e) => e.message);
+  expect(miss).toContain("not in this Bing Webmaster account");
+  expect(miss).not.toContain("other.com"); // the account's other sites are not listed unasked
 
   engineCalls.length = 0;
   await withSiteUrl("sc-domain:other.com", () => compareEngines({ days: 28 }));
   const bingSites = new Set(engineCalls.filter((c) => c.url.hostname === "ssl.bing.com" && c.url.searchParams.get("siteUrl")).map((c) => c.url.searchParams.get("siteUrl")));
   expect([...bingSites]).toEqual(["https://www.other.com/"]);
 
+  state.sitesDown = true; // Google failing must not hide Bing / Yandex
   const all: any = await listAllSites();
+  state.sitesDown = false;
   expect(all.bing).toContain("https://www.other.com/");
   expect(all.yandex).toContain("https://default.com/");
-  expect(all.google.error).toContain("unexpected"); // the fake has no sites.list: Google failing must not hide Bing / Yandex
+  expect(all.google.error).toContain("sites.list down");
+  const one: any = await listAllSites("www.other.com");
+  expect(one).toEqual({ google: [{ siteUrl: "sc-domain:other.com", permissionLevel: "siteOwner" }], bing: ["https://www.other.com/"], yandex: [] });
 });
 
 test("setup registers through claude mcp add-json, so the server name and env values survive", async () => {
@@ -952,4 +963,16 @@ test("PageSpeed bills your project via the OAuth token when it carries openid; o
     process.env.GSC_AUTH_MODE = "service_account";
     delete process.env.GSC_SCOPES;
   }
+});
+
+test("site_url: a bare domain or loose URL resolves to the accessible property; unknown sites fail without listing others", async () => {
+  const { resolveProperty } = await import("../src/tools/sites.ts");
+  expect(await resolveProperty("default.com")).toBe("sc-domain:default.com");
+  expect(await resolveProperty("https://www.default.com/page")).toBe("sc-domain:default.com");
+  expect(await resolveProperty("prefix.com")).toBe("https://www.prefix.com/");
+  expect(await resolveProperty("https://www.prefix.com/")).toBe("https://www.prefix.com/");
+  expect(await resolveProperty("legacy.org")).toBe("http://legacy.org/");
+  const miss = await resolveProperty("nope.com").catch((e) => e.message);
+  expect(miss).toContain("not a Search Console property");
+  expect(miss).not.toContain("other.com");
 });

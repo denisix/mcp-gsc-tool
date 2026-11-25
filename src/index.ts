@@ -2,8 +2,9 @@
 
 import { McpServer, type ToolResult } from "./mcp.js";
 import { z } from "zod";
+import { version } from "../package.json";
 
-import { GUARDRAIL_SUFFIX, POSITION_CAVEAT, withMeta } from "./guardrails.js";
+import { SERVER_INSTRUCTIONS, withMeta } from "./guardrails.js";
 import { withSiteUrl } from "./auth.js";
 import { quickWins } from "./tools/quick-wins.js";
 import { ctrOpportunities } from "./tools/ctr-opportunities.js";
@@ -22,7 +23,7 @@ import { contentRecommendations } from "./tools/content-recommendations.js";
 import { multiSiteDashboard } from "./tools/multi-site-dashboard.js";
 import { submitUrl, submitBatch, getIndexingStatus } from "./tools/submit-url.js";
 import { submitSitemap, listSitemaps, getSitemap, deleteSitemap } from "./tools/submit-sitemap.js";
-import { listAllSites, addSite, deleteSite } from "./tools/sites.js";
+import { listAllSites, addSite, deleteSite, resolveProperty } from "./tools/sites.js";
 import { comparePeriods } from "./tools/compare-periods.js";
 import { drilldown } from "./tools/drilldown.js";
 import { batchInspectUrls, MAX_BATCH_INSPECT } from "./tools/batch-inspect.js";
@@ -57,10 +58,7 @@ const filterListsSchema = z
   .describe("Multi-value filters: keep rows matching ANY listed value, e.g. [{dimension:'country',expressions:['deu','aut','che']}]. A dimension cannot appear in both filters and filter_lists");
 
 
-const server = new McpServer({
-  name: "mcp-gsc-tool",
-  version: "2.5.1",
-});
+const server = new McpServer({ name: "mcp-gsc-tool", version }, SERVER_INSTRUCTIONS);
 
 // Every tool that queries a property takes an optional `site_url`. The wrapper
 // adds it to the schema and runs the handler inside withSiteUrl(), so
@@ -70,8 +68,7 @@ const SITE_URL_PARAM = z
   .string()
   .optional()
   .describe(
-    "GSC property for this call, e.g. sc-domain:example.com or https://www.example.com/. " +
-    "Omit to use the default property (GSC_SITE_URL). Your credentials must have access to it."
+    "Site for this call: a domain (example.com) or an exact property (sc-domain:example.com, https://www.example.com/). Default: GSC_SITE_URL."
   );
 const NO_PROPERTY_TOOLS = new Set([
   "multi_site_dashboard", "submit_url", "submit_batch", "indexing_status", "pagespeed", "list_sites", "add_site", "delete_site",
@@ -85,13 +82,15 @@ const READ_ONLY = ["1", "true", "yes"].includes((process.env.GSC_READ_ONLY ?? ""
 function tool(name: string, description: string, shape: z.ZodRawShape, handler: (args: any) => ToolResult | Promise<ToolResult>) {
   if (READ_ONLY && WRITE_TOOLS.has(name)) return;
   if (NO_PROPERTY_TOOLS.has(name)) return server.tool(name, description, shape, handler);
-  server.tool(name, description, { ...shape, site_url: SITE_URL_PARAM }, (args) => withSiteUrl(args.site_url, () => handler(args)));
+  server.tool(name, description, { ...shape, site_url: SITE_URL_PARAM }, async (args) =>
+    withSiteUrl(args.site_url ? await resolveProperty(args.site_url) : undefined, () => handler(args))
+  );
 }
 
 // 1. Quick Wins
 tool(
   "quick_wins",
-  "Find keywords you're almost ranking for that could be pushed to page one. Returns queries at positions 4-15 with high impressions, sorted by traffic opportunity." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Find keywords you're almost ranking for that could be pushed to page one. Returns queries at positions 4-15 with high impressions, sorted by traffic opportunity.",
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     min_impressions: z.number().default(100).describe("Minimum impressions threshold"),
@@ -101,7 +100,7 @@ tool(
     const results = await quickWins(days, min_impressions, max_position);
     const wrapped = withMeta(results, "quick_wins", { days, min_impressions, max_position });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -109,7 +108,7 @@ tool(
 // 2. CTR Opportunities
 tool(
   "ctr_opportunities",
-  "Find pages with high impressions but CTR significantly below expected for their position. These are title/meta description optimisation candidates." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Find pages with high impressions but CTR significantly below expected for their position. These are title/meta description optimisation candidates.",
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     min_impressions: z.number().default(500).describe("Minimum impressions threshold"),
@@ -118,7 +117,7 @@ tool(
     const results = await ctrOpportunities(days, min_impressions);
     const wrapped = withMeta(results, "ctr_opportunities", { days, min_impressions });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -126,7 +125,7 @@ tool(
 // 3. Traffic Drops
 tool(
   "traffic_drops",
-  "Find pages that lost the most traffic recently. Compares current period vs prior period and diagnoses whether each drop is a ranking loss, CTR collapse, or demand decline." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Find pages that lost the most traffic recently. Compares current period vs prior period and diagnoses whether each drop is a ranking loss, CTR collapse, or demand decline.",
   {
     days: z.number().default(28).describe("Number of days per period to compare"),
   },
@@ -134,7 +133,7 @@ tool(
     const results = await trafficDrops(days);
     const wrapped = withMeta(results, "traffic_drops", { days });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -142,7 +141,7 @@ tool(
 // 4. Content Gaps
 tool(
   "content_gaps",
-  "Find topics you should create content for. Returns queries where you get impressions but rank beyond position 20, meaning there is search demand but no real content targeting it." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Find topics you should create content for. Returns queries where you get impressions but rank beyond position 20, meaning there is search demand but no real content targeting it.",
   {
     days: z.number().default(90).describe("Number of days to analyse"),
     min_impressions: z.number().default(50).describe("Minimum impressions threshold"),
@@ -152,7 +151,7 @@ tool(
     const results = await contentGaps(days, min_impressions, min_position);
     const wrapped = withMeta(results, "content_gaps", { days, min_impressions, min_position });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -160,7 +159,7 @@ tool(
 // 5. Site Snapshot
 tool(
   "site_snapshot",
-  "Get a quick overview of how the site is performing. Returns total clicks, impressions, CTR, and position with a comparison to the prior period." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Get a quick overview of how the site is performing. Returns total clicks, impressions, CTR, and position with a comparison to the prior period.",
   {
     days: z.number().default(28).describe("Number of days per period"),
   },
@@ -168,7 +167,7 @@ tool(
     const results = await siteSnapshot(days);
     const wrapped = withMeta(results, "site_snapshot", { days });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -176,7 +175,7 @@ tool(
 // 6. Inspect URL
 tool(
   "inspect_url",
-  "Check if a URL is indexed and why or why not. Returns indexing status, last crawl date, canonical info, robots/noindex issues, and mobile usability in one answer." + GUARDRAIL_SUFFIX,
+  "Check if a URL is indexed and why or why not. Returns indexing status, last crawl date, canonical info, robots/noindex issues, and mobile usability in one answer.",
   {
     url: z.string().describe("The full URL to inspect"),
   },
@@ -184,7 +183,7 @@ tool(
     const results = await inspectUrlTool(url);
     const wrapped = withMeta(results, "inspect_url", { url });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -192,7 +191,7 @@ tool(
 // 7. Cannibalization Check
 tool(
   "cannibalization_check",
-  "Find keywords where multiple pages from your site compete against each other. Shows which page ranks higher, the position gap, and combined impressions being split." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Find keywords where multiple pages from your site compete against each other. Shows which page ranks higher, the position gap, and combined impressions being split.",
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     min_impressions: z.number().default(50).describe("Minimum combined impressions for a query"),
@@ -201,7 +200,7 @@ tool(
     const results = await cannibalizationCheck(days, min_impressions);
     const wrapped = withMeta(results, "cannibalization_check", { days, min_impressions });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -209,13 +208,13 @@ tool(
 // 8. Content Decay
 tool(
   "content_decay",
-  "Find pages that are slowly dying with consistent traffic decline over three consecutive 30-day periods. One bad month is noise; three consecutive bad months is a problem." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Find pages that are slowly dying with consistent traffic decline over three consecutive 30-day periods. One bad month is noise; three consecutive bad months is a problem.",
   {},
   async () => {
     const results = await contentDecay();
     const wrapped = withMeta(results, "content_decay", {});
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -223,7 +222,7 @@ tool(
 // 9. Topic Cluster Performance
 tool(
   "topic_cluster_performance",
-  "See how a group of pages performs as a whole. Aggregates clicks, impressions, CTR, and position for all pages matching a URL path pattern, plus top 5 pages and queries." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "See how a group of pages performs as a whole. Aggregates clicks, impressions, CTR, and position for all pages matching a URL path pattern, plus top 5 pages and queries.",
   {
     path_pattern: z.string().describe("URL path pattern to match (e.g. /blog/seo)"),
     days: z.number().default(28).describe("Number of days to analyse"),
@@ -232,7 +231,7 @@ tool(
     const results = await topicClusterPerformance(path_pattern, days);
     const wrapped = withMeta(results, "topic_cluster_performance", { path_pattern, days });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -240,7 +239,7 @@ tool(
 // 10. CTR vs Benchmark
 tool(
   "ctr_vs_benchmark",
-  "Compare your actual CTR per page against industry benchmarks by position. Flags pages significantly underperforming for their ranking position." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Compare your actual CTR per page against industry benchmarks by position. Flags pages significantly underperforming for their ranking position.",
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     min_impressions: z.number().default(200).describe("Minimum impressions threshold"),
@@ -249,7 +248,7 @@ tool(
     const results = await ctrVsBenchmark(days, min_impressions);
     const wrapped = withMeta(results, "ctr_vs_benchmark", { days, min_impressions });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -269,7 +268,7 @@ tool(
   async ({ claim, metric, expected_value, url, query, days }) => {
     const results = await verifyClaim(claim, metric, expected_value, url, query, days);
     return {
-      content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(results) }],
     };
   }
 );
@@ -277,7 +276,7 @@ tool(
 // 12. Advanced Search Analytics
 tool(
   "advanced_search_analytics",
-  "Run a custom search analytics query with flexible dimensions and filters. Supports country, device, query, page, searchAppearance and brandedClassification, multi-country / multi-device filter lists, and search type (web/image/video/news/discover/googleNews/webMultimodal). Google rejects some combinations: brandedClassification cannot be combined with a query filter, and webMultimodal cannot be grouped or filtered by query or brandedClassification. For power users who need specific data cuts." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Run a custom search analytics query with flexible dimensions and filters. Supports country, device, query, page, searchAppearance and brandedClassification, multi-country / multi-device filter lists, and search type (web/image/video/news/discover/googleNews/webMultimodal). Google rejects some combinations: brandedClassification cannot be combined with a query filter, and webMultimodal cannot be grouped or filtered by query or brandedClassification. For power users who need specific data cuts.",
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     dimensions: z.array(z.string()).default(["query"]).describe("Dimensions to group by: query, page, country, device, date, searchAppearance, brandedClassification (BRANDED / NON_BRANDED, data from 2026-02-21, eligible top-level properties only)"),
@@ -297,7 +296,7 @@ tool(
     const results = await advancedSearchAnalytics(days, dimensions, filters, row_limit, order_by, order_direction, search_type, filter_lists, hourly);
     const wrapped = withMeta(results, "advanced_search_analytics", { days, dimensions, filters, filter_lists, row_limit, order_by, search_type, hourly });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -305,7 +304,7 @@ tool(
 // 13. Check Alerts
 tool(
   "check_alerts",
-  "Check for SEO alerts: position drops, CTR collapses, click losses, and pages that disappeared from search results. Returns severity-rated alerts so you know what needs attention first." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Check for SEO alerts: position drops, CTR collapses, click losses, and pages that disappeared from search results. Returns severity-rated alerts so you know what needs attention first.",
   {
     days: z.number().default(7).describe("Number of days per period to compare"),
     position_drop_threshold: z.number().default(20).describe("Alert if position drops more than this many spots"),
@@ -316,7 +315,7 @@ tool(
     const results = await checkAlerts(days, position_drop_threshold, ctr_drop_threshold, click_drop_threshold);
     const wrapped = withMeta(results, "check_alerts", { days, position_drop_threshold, ctr_drop_threshold, click_drop_threshold });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -324,7 +323,7 @@ tool(
 // 14. Content Recommendations
 tool(
   "content_recommendations",
-  "Get actionable content recommendations by cross-referencing quick wins, content gaps, and cannibalisation data. Returns prioritised actions: pages to update, content to create, and pages to consolidate." + GUARDRAIL_SUFFIX,
+  "Get actionable content recommendations by cross-referencing quick wins, content gaps, and cannibalisation data. Returns prioritised actions: pages to update, content to create, and pages to consolidate.",
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     max_recommendations: z.number().default(10).describe("Maximum number of recommendations"),
@@ -333,7 +332,7 @@ tool(
     const results = await contentRecommendations(days, max_recommendations);
     const wrapped = withMeta(results, "content_recommendations", { days, max_recommendations });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -343,16 +342,16 @@ tool(
 // 16. Multi-Site Dashboard
 tool(
   "multi_site_dashboard",
-  "Health check across multiple GSC properties in one view. Shows clicks, impressions, CTR, and position for each site with period comparison and health status. Agency essential." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Health check across multiple GSC properties in one view. Shows clicks, impressions, CTR, and position for each site with period comparison and health status. Agency essential.",
   {
     site_urls: z.array(z.string()).optional().describe("Array of GSC property URLs. Falls back to GSC_SITE_URLS env var."),
     days: z.number().default(28).describe("Number of days per period"),
   },
   async ({ site_urls, days }) => {
-    const results = await multiSiteDashboard(site_urls, days);
+    const results = await multiSiteDashboard(site_urls && (await Promise.all(site_urls.map(resolveProperty))), days);
     const wrapped = withMeta(results, "multi_site_dashboard", { site_urls, days });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -360,7 +359,7 @@ tool(
 // 17. Submit URL for Indexing
 tool(
   "submit_url",
-  "Submit a URL to Google's Indexing API to request crawling and indexing. Google only supports the Indexing API for pages with JobPosting or BroadcastEvent (livestream) structured data; for other pages it may be ignored, and submit_sitemap is the supported route." + GUARDRAIL_SUFFIX,
+  "Submit a URL to Google's Indexing API to request crawling and indexing. Google only supports the Indexing API for pages with JobPosting or BroadcastEvent (livestream) structured data; for other pages it may be ignored, and submit_sitemap is the supported route.",
   {
     url: z.string().describe("The full URL to submit for indexing"),
     action: z.enum(["URL_UPDATED", "URL_DELETED"]).default("URL_UPDATED").describe("URL_UPDATED for new/changed content, URL_DELETED for removed pages"),
@@ -368,7 +367,7 @@ tool(
   async ({ url, action }) => {
     const results = await submitUrl(url, action);
     return {
-      content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(results) }],
     };
   }
 );
@@ -376,7 +375,7 @@ tool(
 // 18. Batch Submit URLs
 tool(
   "submit_batch",
-  "Submit up to 200 URLs to Google's Indexing API in one go. Daily quota is 200 URL notifications. Use for bulk indexing requests after publishing multiple pages or a site-wide update." + GUARDRAIL_SUFFIX,
+  "Submit up to 200 URLs to Google's Indexing API in one go. Daily quota is 200 URL notifications. Use for bulk indexing requests after publishing multiple pages or a site-wide update.",
   {
     urls: z.array(z.string()).describe("Array of URLs to submit (max 200)"),
     action: z.enum(["URL_UPDATED", "URL_DELETED"]).default("URL_UPDATED").describe("URL_UPDATED for new/changed content, URL_DELETED for removed pages"),
@@ -384,7 +383,7 @@ tool(
   async ({ urls, action }) => {
     const results = await submitBatch(urls, action);
     return {
-      content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(results) }],
     };
   }
 );
@@ -392,14 +391,14 @@ tool(
 // 19. Submit Sitemap
 tool(
   "submit_sitemap",
-  "Notify Google of a new or updated sitemap. Triggers Google to recrawl the sitemap and discover new pages." + GUARDRAIL_SUFFIX,
+  "Notify Google of a new or updated sitemap. Triggers Google to recrawl the sitemap and discover new pages.",
   {
     sitemap_url: z.string().optional().describe("Full sitemap URL (defaults to {site_url}/sitemap.xml)"),
   },
   async ({ sitemap_url }) => {
     const results = await submitSitemap(sitemap_url);
     return {
-      content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(results) }],
     };
   }
 );
@@ -407,13 +406,13 @@ tool(
 // 20. List Sitemaps
 tool(
   "list_sitemaps",
-  "List all sitemaps submitted for the site, with status, errors, warnings, and indexed page counts." + GUARDRAIL_SUFFIX,
+  "List all sitemaps submitted for the site, with status, errors, warnings, and indexed page counts.",
   {},
   async () => {
     const results = await listSitemaps();
     const wrapped = withMeta(results, "list_sitemaps", {});
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -444,7 +443,7 @@ tool(
 // 28. Generative AI Conversation Queries
 tool(
   "genai_conversation_queries",
-  "Surface AI-conversation exhaust hiding in your regular query data: bare replies to Google's AI ('yes', 'go on'), 'what about X' pivot follow-ups, conversational questions, AI-visibility tracker probes, and full agent prompts logged as queries. Google counts every AI Mode follow-up as a new query and folds AI Mode/AI Overviews into the web search type, so these fragments carry real impressions, positions and clicks. The dedicated Generative AI report has no query dimension; this is the only query-level AI evidence available anywhere. Classifies every match into seven buckets with landing pages, plus a monthly timeline showing when reply-artefacts first appeared on your site. Treat probe and harness buckets as machine traffic, not demand." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Surface AI-conversation exhaust hiding in your regular query data: bare replies to Google's AI ('yes', 'go on'), 'what about X' pivot follow-ups, conversational questions, AI-visibility tracker probes, and full agent prompts logged as queries. Google counts every AI Mode follow-up as a new query and folds AI Mode/AI Overviews into the web search type, so these fragments carry real impressions, positions and clicks. The dedicated Generative AI report has no query dimension; this is the only query-level AI evidence available anywhere. Classifies every match into seven buckets with landing pages, plus a monthly timeline showing when reply-artefacts first appeared on your site. Treat probe and harness buckets as machine traffic, not demand.",
   {
     days: z.number().default(480).describe("Days to analyse (default 480, the full 16 months GSC retains)"),
     min_impressions: z.number().default(1).describe("Minimum impressions for a query to be listed (single-impression rows are evidence, not noise, so the default keeps them)"),
@@ -455,7 +454,7 @@ tool(
     const results = await genaiConversationQueries(days, min_impressions, max_rows_per_bucket, include_timeline);
     const wrapped = withMeta(results, "genai_conversation_queries", { days, min_impressions, max_rows_per_bucket, include_timeline });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -465,7 +464,7 @@ tool(
 // 30. Branded vs Non-Branded
 tool(
   "branded_vs_non_branded",
-  "Split search performance into branded and non-branded traffic using Google's own query classification. Returns clicks, impressions, CTR, position and share for each side, change against the previous period, a daily trend, and the top queries and pages on each side. Only top-level properties with enough query volume are classified, and only from 2026-02-21; when eligible is false the data is unavailable, not zero." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Split search performance into branded and non-branded traffic using Google's own query classification. Returns clicks, impressions, CTR, position and share for each side, change against the previous period, a daily trend, and the top queries and pages on each side. Only top-level properties with enough query volume are classified, and only from 2026-02-21; when eligible is false the data is unavailable, not zero.",
   {
     days: z.number().default(28).describe("Number of days to analyse"),
     row_limit: z.number().default(25).describe("Maximum top queries and pages to return per side"),
@@ -477,7 +476,7 @@ tool(
     const results = await brandedVsNonBranded(days, row_limit, filter_lists, include_trend, search_type);
     const wrapped = withMeta(results, "branded_vs_non_branded", { days, row_limit, filter_lists, include_trend, search_type });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -485,7 +484,7 @@ tool(
 // 31. Multimodal Search Overview
 tool(
   "multimodal_search_overview",
-  "Performance in multimodal search: Google Lens, Circle to Search on Android, and image uploads in Google Search. Returns totals with change against the previous period, the size of multimodal relative to web search, top pages, countries, devices and a daily trend. Google provides no queries for this surface, so there is no keyword breakdown." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Performance in multimodal search: Google Lens, Circle to Search on Android, and image uploads in Google Search. Returns totals with change against the previous period, the size of multimodal relative to web search, top pages, countries, devices and a daily trend. Google provides no queries for this surface, so there is no keyword breakdown.",
   {
     days: z.number().default(90).describe("Number of days to analyse (multimodal is low volume, default 90)"),
     row_limit: z.number().default(25).describe("Maximum pages and countries to return"),
@@ -495,7 +494,7 @@ tool(
     const results = await multimodalSearchOverview(days, row_limit, filter_lists);
     const wrapped = withMeta(results, "multimodal_search_overview", { days, row_limit, filter_lists });
     return {
-      content: [{ type: "text", text: JSON.stringify(wrapped, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(wrapped) }],
     };
   }
 );
@@ -503,7 +502,7 @@ tool(
 // ---------------------------------------------------------------------------
 // Properties, sitemaps, indexing status
 // ---------------------------------------------------------------------------
-const json = (v: unknown): ToolResult => ({ content: [{ type: "text", text: JSON.stringify(v, null, 2) }] });
+const json = (v: unknown): ToolResult => ({ content: [{ type: "text", text: JSON.stringify(v) }] });
 const searchTypeSchema = z.enum(["web", "image", "video", "news", "discover", "googleNews"]).optional().describe("Search surface. Defaults to web");
 const filtersSchema = z.array(z.object({
   dimension: z.string().describe("query, page, country, device or searchAppearance"),
@@ -513,42 +512,42 @@ const filtersSchema = z.array(z.object({
 
 tool(
   "list_sites",
-  "List every site these credentials can access: Search Console properties with permission level (siteOwner, siteFullUser, siteRestrictedUser, siteUnverifiedUser), plus Bing and Yandex sites when configured. Pass a listed site as site_url (Google) or site (bing_* / yandex_*) to query it.",
-  {},
-  async () => json(await listAllSites())
+  "List the sites these credentials can access in Search Console (with permission level), Bing and Yandex. Pass domain to check just one site (it and its subdomains). Call without domain only when the user asks which sites exist: other tools take a bare domain such as example.com as site_url / site and find the matching property themselves.",
+  { domain: z.string().optional().describe("Only this site, e.g. example.com") },
+  async ({ domain }) => json(await listAllSites(domain))
 );
 
 tool(
   "add_site",
-  "Add a property to Search Console (it must still be verified before it returns data)." + GUARDRAIL_SUFFIX,
+  "Add a property to Search Console (it must still be verified before it returns data).",
   { property: z.string().describe("e.g. sc-domain:example.com or https://www.example.com/") },
   async ({ property }) => json(await addSite(property))
 );
 
 tool(
   "delete_site",
-  "Remove a property from this account's Search Console. Data is kept by Google and returns if the property is re-added. Confirm with the user first." + GUARDRAIL_SUFFIX,
+  "Remove a property from this account's Search Console. Data is kept by Google and returns if the property is re-added. Confirm with the user first.",
   { property: z.string().describe("e.g. sc-domain:example.com or https://www.example.com/") },
   async ({ property }) => json(await deleteSite(property))
 );
 
 tool(
   "get_sitemap",
-  "Status of one submitted sitemap: last submitted/downloaded, pending, warnings, errors, and submitted vs indexed counts per content type." + GUARDRAIL_SUFFIX,
+  "Status of one submitted sitemap: last submitted/downloaded, pending, warnings, errors, and submitted vs indexed counts per content type.",
   { sitemap_url: z.string().optional().describe("Full sitemap URL (defaults to {site_url}/sitemap.xml)") },
   async ({ sitemap_url }) => json(withMeta(await getSitemap(sitemap_url), "get_sitemap", { sitemap_url }))
 );
 
 tool(
   "delete_sitemap",
-  "Remove a sitemap from Search Console (Google stops reading it; already indexed pages are not removed). Confirm with the user first." + GUARDRAIL_SUFFIX,
+  "Remove a sitemap from Search Console (Google stops reading it; already indexed pages are not removed). Confirm with the user first.",
   { sitemap_url: z.string().describe("Full URL of the submitted sitemap") },
   async ({ sitemap_url }) => json(await deleteSitemap(sitemap_url))
 );
 
 tool(
   "indexing_status",
-  "Last Indexing API notification Google recorded for a URL (latest URL_UPDATED / URL_DELETED and when). Shows what was submitted, not whether the page is indexed: use inspect_url for that." + GUARDRAIL_SUFFIX,
+  "Last Indexing API notification Google recorded for a URL (latest URL_UPDATED / URL_DELETED and when). Shows what was submitted, not whether the page is indexed: use inspect_url for that.",
   { url: z.string().describe("Full URL") },
   async ({ url }) => json(await getIndexingStatus(url))
 );
@@ -558,7 +557,7 @@ tool(
 // ---------------------------------------------------------------------------
 tool(
   "compare_periods",
-  "Period-over-period (or year-over-year) comparison: totals with % change, plus per query/page top gainers, top losers, new and lost items. Both windows end 3 days back so partial recent data does not read as a drop." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Period-over-period (or year-over-year) comparison: totals with % change, plus per query/page top gainers, top losers, new and lost items. Both windows end 3 days back so partial recent data does not read as a drop.",
   {
     days: z.number().int().min(1).max(240).default(28).describe("Days per period"),
     dimension: z.enum(["query", "page", "country", "device", "searchAppearance"]).default("query").describe("What to compare"),
@@ -573,7 +572,7 @@ tool(
 
 tool(
   "page_queries",
-  "Drill down: pass `page` to get the queries that bring it traffic, or `query` to get the pages that rank for it (several pages for one query = possible cannibalization)." + GUARDRAIL_SUFFIX + POSITION_CAVEAT,
+  "Drill down: pass `page` to get the queries that bring it traffic, or `query` to get the pages that rank for it (several pages for one query = possible cannibalization).",
   {
     page: z.string().optional().describe("Exact page URL as GSC reports it"),
     query: z.string().optional().describe("Exact search query"),
@@ -587,14 +586,14 @@ tool(
 
 tool(
   "batch_inspect_urls",
-  `Run URL Inspection on up to ${MAX_BATCH_INSPECT} URLs (3 at a time): indexed or not, coverage state, last crawl, canonical match and issues, with a summary. Stops and returns partial results if the daily inspection quota (2,000 per property) runs out.` + GUARDRAIL_SUFFIX,
+  `Run URL Inspection on up to ${MAX_BATCH_INSPECT} URLs (3 at a time): indexed or not, coverage state, last crawl, canonical match and issues, with a summary. Stops and returns partial results if the daily inspection quota (2,000 per property) runs out.`,
   { urls: z.array(z.string()).min(1).max(MAX_BATCH_INSPECT).describe("URLs on this property") },
   async ({ urls }) => json(withMeta(await batchInspectUrls(urls), "batch_inspect_urls", { count: urls.length }))
 );
 
 tool(
   "indexing_coverage",
-  "Cross-check the sitemap against search visibility: sitemap URLs with no impressions (likely not indexed or never shown), pages with impressions missing from the sitemap, and coverage %. Reads the property's submitted sitemaps (or sitemap_url), follows sitemap indexes, handles .xml.gz. Optionally URL-inspects a sample of the no-impression URLs." + GUARDRAIL_SUFFIX,
+  "Cross-check the sitemap against search visibility: sitemap URLs with no impressions (likely not indexed or never shown), pages with impressions missing from the sitemap, and coverage %. Reads the property's submitted sitemaps (or sitemap_url), follows sitemap indexes, handles .xml.gz. Optionally URL-inspects a sample of the no-impression URLs.",
   {
     sitemap_url: z.string().optional().describe("Sitemap or sitemap index URL. Defaults to every sitemap submitted in GSC"),
     days: z.number().default(90).describe("Days of search data to compare against"),
@@ -617,14 +616,13 @@ tool(
 
 tool(
   "site_audit",
-  `Lighthouse audit of up to ${MAX_AUDIT_PAGES} pages at once: the given urls, or the property's top pages by clicks. Returns scores per page and failed checks (SEO, accessibility, best practices) grouped by check with the pages each affects, so template-wide problems stand out. Takes about 20 s per 2 pages.` + GUARDRAIL_SUFFIX,
+  `Lighthouse audit of up to ${MAX_AUDIT_PAGES} pages at once: the given urls, or the property's top pages by clicks. Returns scores per page and failed checks (SEO, accessibility, best practices) grouped by check with the pages each affects, so template-wide problems stand out. Takes about 20 s per 2 pages.`,
   {
     urls: z.array(z.string()).max(MAX_AUDIT_PAGES).optional().describe("Pages to audit; omit to use the top pages by clicks"),
     pages: z.number().int().min(1).max(MAX_AUDIT_PAGES).default(5).describe("How many top pages when urls is omitted"),
     strategy: z.enum(["mobile", "desktop"]).default("mobile"),
   },
-  async ({ urls, pages, strategy }) => json(withMeta(await siteAudit({ urls, pages, strategy }), "site_audit", { pages, strategy }, "PageSpeed Insights API + Google Search Console API (live data)",
-    "Scores and checks come directly from Lighthouse via the PageSpeed Insights API; a lab run varies between runs. Base your analysis only on this data."))
+  async ({ urls, pages, strategy }) => json(withMeta(await siteAudit({ urls, pages, strategy }), "site_audit", { pages, strategy }, "PageSpeed Insights API + Google Search Console API (live data)", "Lighthouse lab runs vary between runs."))
 );
 
 tool(
@@ -652,13 +650,13 @@ const yandexSiteParam = z.string().optional().describe("Yandex host, e.g. https:
 if (bingConfigured()) {
   tool(
     "bing_query_stats",
-    "Bing search queries for the site: clicks, impressions, CTR and average position, summed over the window. Bing updates this weekly." + GUARDRAIL_SUFFIX,
+    "Bing search queries for the site: clicks, impressions, CTR and average position, summed over the window. Bing updates this weekly.",
     { site: bingSiteParam, days: z.number().default(28), limit: z.number().int().min(1).max(1000).default(50) },
     async (a) => json(await bingQueryStats(a))
   );
   tool(
     "bing_traffic",
-    "Bing daily clicks and impressions with totals, plus the latest crawl stats (pages crawled, in index, crawl errors, robots.txt blocks, HTTP status counts, malware)." + GUARDRAIL_SUFFIX,
+    "Bing daily clicks and impressions with totals, plus the latest crawl stats (pages crawled, in index, crawl errors, robots.txt blocks, HTTP status counts, malware).",
     { site: bingSiteParam, days: z.number().default(90) },
     async (a) => json(await bingTraffic(a))
   );
@@ -670,13 +668,13 @@ if (bingConfigured()) {
   );
   tool(
     "bing_site_issues",
-    "Bing errors for the site: crawl issues per URL (HTTP errors, blocked by robots.txt, DNS, timeouts, malware), URLs blocked from Bing, and submitted sitemaps / feeds with status and URL count." + GUARDRAIL_SUFFIX,
+    "Bing errors for the site: crawl issues per URL (HTTP errors, blocked by robots.txt, DNS, timeouts, malware), URLs blocked from Bing, and submitted sitemaps / feeds with status and URL count.",
     { site: bingSiteParam },
     async ({ site }) => json(await bingSiteIssues(site))
   );
   tool(
     "bing_submit_urls",
-    "Submit up to 500 URLs to Bing for crawling (SubmitUrlBatch). Checks the daily quota first." + GUARDRAIL_SUFFIX,
+    "Submit up to 500 URLs to Bing for crawling (SubmitUrlBatch). Checks the daily quota first.",
     { urls: z.array(z.string()).min(1).max(500), site: bingSiteParam },
     async ({ urls, site }) => json(await bingSubmitUrls(urls, site))
   );
@@ -685,7 +683,7 @@ if (bingConfigured()) {
 if (yandexConfigured()) {
   tool(
     "yandex_popular_queries",
-    "Yandex search queries for the site: clicks, impressions, CTR and average position. Yandex lists only its popular queries for the site." + GUARDRAIL_SUFFIX,
+    "Yandex search queries for the site: clicks, impressions, CTR and average position. Yandex lists only its popular queries for the site.",
     {
       site: yandexSiteParam,
       days: z.number().default(28),
@@ -697,13 +695,13 @@ if (yandexConfigured()) {
   );
   tool(
     "yandex_site_health",
-    "Yandex Webmaster health: SQI (site quality index), pages in search and excluded, active diagnostics problems by severity, pages-in-search trend, crawl results by HTTP status, pages added to / removed from search, broken internal links, and recently removed pages with the reason." + GUARDRAIL_SUFFIX,
+    "Yandex Webmaster health: SQI (site quality index), pages in search and excluded, active diagnostics problems by severity, pages-in-search trend, crawl results by HTTP status, pages added to / removed from search, broken internal links, and recently removed pages with the reason.",
     { site: yandexSiteParam, days: z.number().default(90) },
     async (a) => json(await yandexSiteHealth(a))
   );
   tool(
     "yandex_recrawl",
-    "Queue URLs for Yandex recrawl. The daily quota is per site and often small; URLs past it are returned as skipped." + GUARDRAIL_SUFFIX,
+    "Queue URLs for Yandex recrawl. The daily quota is per site and often small; URLs past it are returned as skipped.",
     { urls: z.array(z.string()).min(1).max(100), site: yandexSiteParam },
     async ({ urls, site }) => json(await yandexRecrawl(urls, site))
   );
@@ -711,7 +709,7 @@ if (yandexConfigured()) {
 
 tool(
   "compare_engines",
-  "Google vs Bing vs Yandex for the same window: clicks, impressions, CTR, click share and top queries per engine. Engines without credentials (BING_API_KEY, YANDEX_WEBMASTER_TOKEN) are listed as not configured; one engine failing does not stop the others." + GUARDRAIL_SUFFIX,
+  "Google vs Bing vs Yandex for the same window: clicks, impressions, CTR, click share and top queries per engine. Engines without credentials (BING_API_KEY, YANDEX_WEBMASTER_TOKEN) are listed as not configured; one engine failing does not stop the others.",
   {
     days: z.number().default(28),
     limit: z.number().int().min(1).max(50).default(10).describe("Top queries per engine"),
@@ -720,8 +718,7 @@ tool(
   },
   async ({ days, limit, bing_site, yandex_site }) =>
     json(withMeta(await compareEngines({ days, limit, bingSite: bing_site, yandexSite: yandex_site }), "compare_engines", { days },
-      "Google Search Console, Bing Webmaster and Yandex Webmaster APIs (live data)",
-      "Numbers come directly from each engine's API. Base your analysis only on this data. Do not invent or assume additional context."))
+      "Google Search Console, Bing Webmaster and Yandex Webmaster APIs (live data)"))
 );
 
 // ---------------------------------------------------------------------------
@@ -773,11 +770,11 @@ async function main() {
     process.exit(code);
   }
   if (cmd === "--version" || cmd === "-v") {
-    console.log("2.5.1");
+    console.log(version);
     process.exit(0);
   }
 
-  console.error("mcp-gsc-tool v2.5.1 running on stdio");
+  console.error(`mcp-gsc-tool v${version} running on stdio`);
   await server.serveStdio();
 }
 

@@ -10,11 +10,14 @@
 
 import { currentSiteUrl } from "./auth.js";
 
-export const GUARDRAIL_SUFFIX =
-  " IMPORTANT: Base your analysis ONLY on the data returned. Report exact numbers from the results. Do not speculate about causes (e.g. algorithm updates, competitor actions) unless the data explicitly supports it. If the data does not contain enough information to answer a question, say so clearly rather than guessing.";
+/** Rules shared by every tool, sent once as MCP server instructions (not per tool description, to save context). */
+export const SERVER_INSTRUCTIONS = [
+  "Search data for Google Search Console, Bing and Yandex. Pass a bare domain (example.com) as site_url / site; call list_sites only when the user asks which sites exist.",
+  "Base analysis ONLY on the data returned and report its exact numbers. Do not speculate about causes (algorithm updates, competitors) unless the data supports it; if the data cannot answer, say so.",
+  "Position is an impression-weighted average across queries, devices and countries, not a rank-tracker rank; positions beyond page one rest on sparse data. Prefer position deltas between periods over absolute values.",
+].join("\n");
 
-export const POSITION_CAVEAT =
-  " POSITION: position is an impression-weighted average over real impressions, blended across queries, devices and countries. It is not a rank-tracker rank. Deep positions are only recorded when a user actually reaches that part of the results, so values beyond page one rest on sparse data. Treat absolute positions as directional and prefer position deltas between periods when judging change.";
+
 
 /**
  * Wraps tool results with a _meta provenance field so Claude
@@ -25,14 +28,15 @@ export function withMeta(
   toolName: string,
   params: Record<string, unknown>,
   source: string = "Google Search Console API (live data)",
-  note: string = "All numbers in this response come directly from the Google Search Console API. They are exact values, not estimates. Base your analysis only on this data. Do not invent or assume additional context."
+  // The "use only this data" rule lives in SERVER_INSTRUCTIONS; a note here is only for tool-specific caveats.
+  note?: string
 ): {
   _meta: {
     source: string;
     tool: string;
     site_url: string | undefined;
     parameters: Record<string, unknown>;
-    note: string;
+    note?: string;
   };
   data: unknown;
 } {
@@ -42,7 +46,7 @@ export function withMeta(
       tool: toolName,
       site_url: currentSiteUrl(),
       parameters: params,
-      note,
+      ...(note && { note }),
     },
     data,
   };

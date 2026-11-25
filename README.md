@@ -9,8 +9,15 @@ Google Search Console MCP server for **Claude Code CLI**, run with **bun**. 35 t
 Needs [bun](https://bun.sh) and the `claude` CLI.
 
 ```bash
-git clone <this repository> mcp-gsc-tool
-cd mcp-gsc-tool && bun install && bun run build
+bun add -g @denisix/mcp-gsc-tool    # then use `mcp-gsc-tool setup ...` in place of `bun dist/mcp-gsc-tool.js setup ...` below
+```
+
+Install globally rather than running `bunx ... setup`: setup registers the path it runs from, and bunx's cache path can disappear.
+
+From source:
+
+```bash
+git clone https://github.com/denisix/mcp-gsc-tool && cd mcp-gsc-tool && bun install && bun run build
 ```
 
 ## Connect to Google (pick one)
@@ -121,6 +128,7 @@ Read-only API calls retry on 429/5xx with backoff; submissions are never resent.
 | `bun run start` | Run from source |
 | `bun run build` | Bundle to `dist/mcp-gsc-tool.js` (about 200 KB, no `node_modules` needed) |
 | `bun run check` | Type check (TypeScript 7), lint (Biome) and `bun test` |
+| `npm version patch && git push --follow-tags` | Release: CI checks and publishes `@denisix/mcp-gsc-tool` to npm (needs the `NPM_TOKEN` repo secret) |
 | `bun run install:claude` | Build and copy the bundle to `~/.claude/mcp-gsc-tool/`; run `setup` from there once so Claude Code points at it, then re-run this after changes |
 
 ## Changelog (this fork)

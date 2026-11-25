@@ -64,6 +64,7 @@ test(`${kind}: registers the CLI tool set with site_url where it belongs`, async
     const hasSite = "site_url" in (t.inputSchema.properties ?? {});
     expect([t.name, hasSite]).toEqual([t.name, !NO_SITE.includes(t.name)]);
     expect(t.description).not.toContain("PRESENTATION"); // no Desktop-artifact rendering instructions
+    expect(t.description).not.toContain("Base analysis ONLY"); // shared rules go once in server instructions
   }
 }, 20_000);
 
@@ -85,7 +86,8 @@ test(`${kind}: the official MCP SDK client can connect, list and call tools`, as
   const client = new Client({ name: "sdk-interop", version: "1" });
   await client.connect(transport);
   try {
-    expect(client.getServerVersion()).toEqual({ name: "mcp-gsc-tool", version: "2.5.1" });
+    expect(client.getServerVersion()).toEqual({ name: "mcp-gsc-tool", version: (await Bun.file("package.json").json()).version });
+    expect(client.getInstructions()).toContain("Base analysis ONLY on the data returned");
     const { tools } = await client.listTools(); // the SDK validates the response against its own schemas
     expect(tools).toHaveLength(36);
     const { prompts } = await client.listPrompts();

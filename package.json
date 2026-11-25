@@ -1,8 +1,8 @@
 {
-  "name": "mcp-gsc-tool",
+  "name": "@denisix/mcp-gsc-tool",
   "version": "2.5.1",
   "description": "Google Search Console MCP server for Claude Code CLI, run with bun. Fork of Suganthan Mohanadasan's GSC MCP.",
-  "main": "src/index.ts",
+  "main": "dist/mcp-gsc-tool.js",
   "bin": {
     "mcp-gsc-tool": "dist/mcp-gsc-tool.js"
   },
@@ -13,7 +13,8 @@
     "lint": "biome lint src test",
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun test",
-    "install:claude": "bun run build && D=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/mcp-gsc-tool && mkdir -p -m 700 $D && cp dist/mcp-gsc-tool.js $D/ && echo Installed $D/mcp-gsc-tool.js"
+    "install:claude": "bun run build && D=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/mcp-gsc-tool && mkdir -p -m 700 $D && cp dist/mcp-gsc-tool.js $D/ && echo Installed $D/mcp-gsc-tool.js",
+    "prepublishOnly": "bun run check && bun run build"
   },
   "keywords": [
     "mcp",
@@ -24,6 +25,12 @@
   ],
   "author": "Suganthan Mohanadasan (original author); mcp-gsc-tool contributors",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/denisix/mcp-gsc-tool.git"
+  },
+  "homepage": "https://github.com/denisix/mcp-gsc-tool#readme",
+  "bugs": "https://github.com/denisix/mcp-gsc-tool/issues",
   "dependencies": {
     "zod": "^4.6.6"
   },
@@ -34,13 +41,16 @@
     "typescript": "7.0.2"
   },
   "files": [
-    "src",
-    "dist",
+    "dist/mcp-gsc-tool.js",
     "README.md",
     "NOTICE",
     "LICENSE"
   ],
   "engines": {
     "bun": ">=1.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

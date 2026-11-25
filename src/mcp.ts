@@ -36,7 +36,7 @@ export class McpServer {
   private readonly prompts = new Map<string, Prompt>();
   private readonly running = new Map<string | number, AbortController>();
 
-  constructor(private readonly info: { name: string; version: string }) {}
+  constructor(private readonly info: { name: string; version: string }, private readonly instructions?: string) {}
 
   /** Same signature as the SDK's server.tool(name, description, zodShape, handler). */
   tool(name: string, description: string, shape: z.ZodRawShape, handler: Handler): void {
@@ -73,6 +73,8 @@ export class McpServer {
           protocolVersion: SUPPORTED_PROTOCOL_VERSIONS.includes(requested) ? requested : SUPPORTED_PROTOCOL_VERSIONS[0],
           capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } },
           serverInfo: this.info,
+          // Sent once per session (Claude Code puts it in the system prompt) instead of repeated in every tool description.
+          ...(this.instructions && { instructions: this.instructions }),
         };
       }
       case "ping":

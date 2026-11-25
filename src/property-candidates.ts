@@ -5,6 +5,9 @@
  * the permission actually lives on a matching URL-prefix property rather
  * than the domain property.
  */
+/** Bare lowercase hostname of a URL, sc-domain: property or host. */
+export const hostOf = (s: string) => s.trim().replace(/^sc-domain:/, "").replace(/^https?:\/\//i, "").replace(/[:/?#].*$/, "").toLowerCase();
+
 export function propertyCandidates(siteUrl: string): string[] {
   if (siteUrl.startsWith("sc-domain:")) {
     const domain = siteUrl.replace("sc-domain:", "");

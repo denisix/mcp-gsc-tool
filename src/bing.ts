@@ -3,6 +3,7 @@
  * one key for every site the account has verified. Results come wrapped as {"d": ...}.
  */
 import { request } from "./google.js";
+import { hostOf } from "./property-candidates.js";
 
 const BASE = "https://ssl.bing.com/webmaster/api.svc/json";
 
@@ -22,7 +23,6 @@ export function bingSites(): Promise<string[]> {
   return siteList.sites;
 }
 
-const hostOf = (s: string) => s.replace(/^sc-domain:/, "").replace(/^https?:\/\//, "").replace(/[:/].*$/, "").toLowerCase();
 
 /**
  * Bing site as verified in the account: explicit arg, BING_SITE_URL, or the GSC property, matched by
@@ -38,7 +38,8 @@ export async function bingSite(site?: string): Promise<string> {
     sites.find((u) => u === want) ??
     sites.filter((u) => hostOf(u) === hostOf(want)).sort(https)[0] ??
     sites.filter((u) => bare(hostOf(u)) === bare(hostOf(want))).sort(https)[0];
-  if (!match) throw new Error(`${want} is not in this Bing Webmaster account. Sites: ${sites.join(", ") || "none"}`);
+  // Don't list the account's other sites unasked; list_sites does that on request.
+  if (!match) throw new Error(`${want} is not in this Bing Webmaster account (list_sites shows which sites are).`);
   return match;
 }
 
